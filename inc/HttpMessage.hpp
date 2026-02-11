@@ -96,6 +96,32 @@
 // segment-nz		=	1*pchar
 // path-rootless	=	segment-nz *( '/' segment )
 // path-empty		=	0<pchar> ; match NOTHING
+//
+// authority-form	=	uri-host ':' port
+// uri-host			=	host
+//
+// asterisk-form	=	'*'
+//
+// HTTP-version		=	HTTP-name '/' DIGIT '.' DIGIT
+// HTTP-name		=	'H''T''T''P'
+//
+// status-line		=	HTTP-version ' ' status-code ' ' [ reason-phrase ]
+// status-code		=	3DIGIT
+// reason-phrase	=	1*( '\t' | ' ' | VCHAR | obs-text )
+// obs-text			=	%x80-FF
+// VCHAR			=	%x21-7E
+//
+// field-line		=	field-name ':' OWS field-value OWS
+// field-name		=	token
+// field-value		=	*field-content
+// field-content	=	field-vchar
+//						[ 1*( ' ' | '\t' | field-vchar ) field-vchar ]
+// field-vchar		=	VCHAR | obs-text
+// OWS				=	*( ' ' | '\t' )
+// RWS				=	1*( ' ' | '\t' )
+// obs-fold			=	OWS '\r''\n' RWS	; something something message/http
+//
+// message-body		=	*OCTET ; any amount of any characters :fire:
 
 class	HttpMessage {
 public:
