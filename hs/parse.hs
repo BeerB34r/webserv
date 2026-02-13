@@ -36,8 +36,8 @@ instance Alternative Parser where
     (Parser a) <|> (Parser b) = Parser $ \input -> a input <|> b input
 
 -- [Parser helper functions]
-parseOptional :: a -> Parser a -> Parser a
-parseOptional x p1 = p1 <|> pure x
+parseOpt :: a -> Parser a -> Parser a
+parseOpt x p1 = p1 <|> pure x
 
 parseAny :: Parser Char
 parseAny = Parser f
@@ -67,8 +67,6 @@ parsePredicate f = Parser $ \case
     (x:xs) -> if f x then Just (xs, x) else Nothing
     [] -> Nothing
 
-placeholder :: Parser String
-placeholder = parseString "foo"
 
 -- [HTTP parsing business logic]
 
@@ -84,22 +82,27 @@ requestLine = (\a b c d e -> a ++ b ++ c ++ d ++ e) <$>
 requestTarget :: Parser String
 requestTarget = originForm <|> absoluteForm <|> authorityForm <|> asteriskForm
 originForm :: Parser String
-originForm = (++) <$> absolutePath <*> parseOptional "" ((:) <$> parseChar '?' <*> query)
+originForm = (++) <$> absolutePath <*> parseOpt "" ((:) <$> parseChar '?' <*> query)
 absoluteForm :: Parser String
 absoluteForm = absoluteURI
 authorityForm :: Parser String
-authorityForm = undefined
+authorityForm = (++) <$> uriHost <*> ((:) <$> parseChar ':' <*> port)
 asteriskForm :: Parser String
-asteriskForm = undefined
+asteriskForm = singleton <$> parseChar '*'
 
 statusLine :: Parser String
-statusLine = undefined
+statusLine = (++) <$> httpVersion <*> ((:) <$> parseChar ' ' <*> ((++) <$> statusCode <*> ((:) <$> parseChar ' ' <*> parseOpt "" reasonPhrase)))
+
+statusCode :: Parser String
+statusCode = (\a b c -> [a,b,c]) <$> parsePredicate isDigit <*> parsePredicate isDigit <*> parsePredicate isDigit
+reasonPhrase :: Parser String
+reasonPhrase = some (parseAnyOf ['\t', ' '] <|> vchar <|> obsText)
 
 absolutePath :: Parser String
 absolutePath = concat <$> some ((:) <$> parseChar '/' <*> segment)
 
 absoluteURI :: Parser String
-absoluteURI =  (++) <$> scheme <*> ((:) <$> parseChar ':' <*> ((++) <$> hierPart <*> parseOptional "" ((:) <$> parseChar '?' <*> query)))
+absoluteURI =  (++) <$> scheme <*> ((:) <$> parseChar ':' <*> ((++) <$> hierPart <*> parseOpt "" ((:) <$> parseChar '?' <*> query)))
 
 scheme :: Parser String
 scheme = (:) <$> parsePredicate isAlpha <*> many (parsePredicate isAlpha <|> parsePredicate isDigit <|> parseAnyOf ['+', '-', '.'])
@@ -111,17 +114,29 @@ hierPart = ((++) <$> parseString "//" <*> ((++) <$> authority <*> pathAbempty))
     <|> pathEmpty
 
 authority :: Parser String
-authority = (++) <$> parseOptional "" (flip (:) <$> userinfo <*> parseChar '@') <*> 
+authority = (++) <$> parseOpt "" (flip (:) <$> userinfo <*> parseChar '@') <*> 
     ((++) <$> host <*>
-    parseOptional "" ((:) <$> parseChar ':' <*> port))
+    parseOpt "" ((:) <$> parseChar ':' <*> port))
 userinfo :: Parser String
 userinfo = concat <$> many (singleton <$> unreserved <|> pctEncoded <|> singleton <$> subDelims <|> singleton <$> parseChar ':')
+uriHost :: Parser String
+uriHost = host
 host :: Parser String
 host = ipLiteral <|> ipv4address <|> regName
 ipLiteral :: Parser String
 ipLiteral = (:) <$> parseChar '[' <*> (flip (:) <$> (ipv6address <|> ipvfuture) <*> parseChar ']')
 ipv6address :: Parser String
-ipv6address = undefined
+ipv6address = ((++) <$> h16c <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ls32))))))
+    <|> ((++) <$> parseString "::" <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ls32))))))
+    <|> ((++) <$> parseOpt "" h16 <*> ((++) <$> parseString "::" <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ls32))))))
+    <|> ((++) <$> parseOpt "" ((++) <$> parseOpt "" h16c <*> h16) <*> ((++) <$> parseString "::" <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ls32)))))
+    <|> ((++) <$> parseOpt "" ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> h16)) <*> ((++) <$> parseString "::" <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ls32))))
+    <|> ((++) <$> parseOpt "" ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> h16))) <*> ((++) <$> parseString "::" <*> ((++) <$> h16c <*> ls32)))
+    <|> ((++) <$> parseOpt "" ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> h16)))) <*> ((++) <$> parseString "::" <*> ls32))
+    <|> ((++) <$> parseOpt "" ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> h16))))) <*> ((++) <$> parseString "::" <*> h16))
+    <|> ((++) <$> parseOpt "" ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> h16)))))) <*> parseString "::")
+    where
+        h16c = flip (:) <$> h16 <*> parseChar ':'
 ipvfuture :: Parser String
 ipvfuture = (:) <$> parseChar 'v' <*> ((++) <$> some (parsePredicate isHexDigit) <*> ((:) <$> parseChar '.' <*> some (unreserved <|> subDelims <|> parseChar ':')))
 ipv4address :: Parser String
@@ -130,6 +145,14 @@ regName :: Parser String
 regName = concat <$> many (singleton <$> unreserved <|> pctEncoded <|> singleton <$> subDelims)
 port :: Parser String
 port = many (parsePredicate isDigit)
+ls32 :: Parser String
+ls32 = ((++) <$> h16 <*> ((:) <$> parseChar ':' <*> h16 ))
+    <|> ipv4address
+h16 :: Parser String
+h16 = Parser $ \input -> do
+    (input', x) <- runParser (some (parsePredicate isHexDigit)) input
+    if length x > 4 then Nothing else Just (input', x)
+
 decOctet :: Parser String
 decOctet = (\a b c -> [a,b,c]) <$> parseChar '1' <*> parsePredicate isDigit <*> parsePredicate isDigit
     <|> (\a b c -> [a,b,c]) <$> parseChar '2' <*> parseAnyOf "01234" <*> parsePredicate isDigit
@@ -138,16 +161,19 @@ decOctet = (\a b c -> [a,b,c]) <$> parseChar '1' <*> parsePredicate isDigit <*> 
     <|> singleton <$> parsePredicate isDigit
 
 pathAbempty :: Parser String
-pathAbempty = undefined
+pathAbempty = concat <$> many ((:) <$> parseChar '/' <*> segment)
 pathAbsolute :: Parser String
-pathAbsolute = undefined
+pathAbsolute = (:) <$> parseChar '/' <*> parseOpt "" pathRootless
 pathRootless :: Parser String
-pathRootless = undefined
+pathRootless = (++) <$> segmentNz <*> (concat <$> many ((:) <$> parseChar '/' <*> segment))
 pathEmpty :: Parser String
-pathEmpty = undefined
+pathEmpty = pure ""
 
 segment :: Parser String
 segment = concat <$> many pchar
+
+segmentNz :: Parser String
+segmentNz = concat <$> some pchar
 
 query :: Parser String
 query = concat <$> many (pchar <|> singleton <$> parseChar '/' <|> singleton <$> parseChar '?')
@@ -180,7 +206,7 @@ fieldValue = concat <$> many fieldContent
 
 fieldContent :: Parser String
 fieldContent = ((++) . singleton <$> fieldVchar) <*> optionalPart
-    where optionalPart = parseOptional "" content
+    where optionalPart = parseOpt "" content
             where
                 content = Parser $ \input -> do
                     (input', x) <- runParser (some (parseAnyOf [' ', '\t'] <|> fieldVchar)) input
