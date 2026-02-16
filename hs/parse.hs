@@ -6,6 +6,7 @@ import Data.List
 import Control.Applicative
 
 import System.Environment
+import Data.Maybe
 
 newtype Parser a = Parser {
     runParser :: String -> Maybe (String, a)
@@ -15,8 +16,11 @@ type HTTPMessage = (String, [String], String)
 
 show :: HTTPMessage -> String
 show (begin, middle, end) = "start-line: \"" ++ begin ++ "\"\n"
-    ++ "field-lines: " ++ Prelude.show middle ++ "\n"
+    ++ "field-lines: [\n" ++ f (map Prelude.show middle) ++ "]\n"
     ++ "message-body: \"" ++ end ++ "\"\n"
+    where
+        f (x:xs) = "\t" ++ x ++ "\n" ++ f xs
+        f [] = ""
 
 -- Functor so awesome
 instance Functor Parser where
@@ -114,7 +118,7 @@ hierPart = ((++) <$> parseString "//" <*> ((++) <$> authority <*> pathAbempty))
     <|> pathEmpty
 
 authority :: Parser String
-authority = (++) <$> parseOpt "" (flip (:) <$> userinfo <*> parseChar '@') <*> 
+authority = (++) <$> parseOpt "" (flip (:) <$> userinfo <*> parseChar '@') <*>
     ((++) <$> host <*>
     parseOpt "" ((:) <$> parseChar ':' <*> port))
 userinfo :: Parser String
@@ -250,9 +254,18 @@ httpMessage input = do
     (input''', cleanMessageBody) <- runParser messageBody input''
     Just (cleanStartLine, cleanFieldLines, cleanMessageBody)
 
+bold :: String
+bold = "\x1B[1m"
+clear :: String
+clear = "\x1B[0m"
 
 main :: IO()
 main = do
     args <- getArgs
-    print args
-    print . map httpMessage $ args
+    mapM_ (uncurry parseCheck) . zip args . map readFile $ args
+    where
+        parseCheck fileName file = do
+            toPrint <- maybe (fileName ++ " is not a valid HTTP message") Main.show . httpMessage <$> file
+            let toPrintTab = (concatMap (\a -> "\t"++ a ++ "\n") . lines) toPrint
+            putStrLn (bold ++ fileName ++ ":" ++ clear)
+            putStrLn toPrintTab
