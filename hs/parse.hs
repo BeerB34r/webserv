@@ -17,7 +17,7 @@ type HTTPMessage = (String, [String], String)
 show :: HTTPMessage -> String
 show (begin, middle, end) = "start-line: \"" ++ begin ++ "\"\n"
     ++ "field-lines: [\n" ++ f (map Prelude.show middle) ++ "]\n"
-    ++ "message-body: \"" ++ end ++ "\"\n"
+    ++ "message-body: \n\"" ++ end ++ "\"\n"
     where
         f (x:xs) = "\t" ++ x ++ "\n" ++ f xs
         f [] = ""
@@ -268,4 +268,4 @@ main = do
             toPrint <- maybe (fileName ++ " is not a valid HTTP message") Main.show . httpMessage <$> file
             let toPrintTab = (concatMap (\a -> "\t"++ a ++ "\n") . lines) toPrint
             putStrLn (bold ++ fileName ++ ":" ++ clear)
-            putStrLn toPrintTab
+            putStr toPrintTab
