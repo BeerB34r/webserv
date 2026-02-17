@@ -9,7 +9,7 @@ DEPFLAGS		=	-MM -MF $@ -MT $@ -MT $(BINDIR)$(addsuffix .o,$(notdir $(basename $<
 INC				=	-I$(INCDIR)
 INCDIR			:=	inc/
 VPATH			=	$(SRCDIR)
-CXXFLAGS		?=	-Wall -Wextra -Werror -pedantic
+CXXFLAGS		?=	-Wall -Wextra -Werror -pedantic -ggdb
 CPPFLAGS		=	$(INC) -std=c++2b
 LDFLAGS			:=
 CXX				:=	c++

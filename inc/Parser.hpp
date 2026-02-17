@@ -96,6 +96,6 @@ namespace Parse {
 	auto	some(const Parser<std::string>) noexcept -> Parser<std::string>;
 }
 
-#include "Parser.tpp" // implementation
+#include "Parser.tpp" // template implementation
 
 #endif // PARSER_HPP
