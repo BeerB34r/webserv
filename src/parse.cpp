@@ -27,10 +27,10 @@
 
 #include <Parser.hpp>
 
-// TODO: if empty, return Nothing
 Parser<char>	Parse::parseChar(char c) {
 	Parser<char>	out([c](const std::string& s) -> Maybe<Parser<char>::resultType> {
-			if (s.front() == c)
+			if (s.empty()) return std::nullopt;
+			else if (s.front() == c)
 				return Parser<char>::resultType(s.data() + 1, s.front());
 			else
 				return std::nullopt;
@@ -41,6 +41,7 @@ Parser<char>	Parse::parseChar(char c) {
 
 Parser<char>	Parse::parseAny() {
 	Parser<char>	out([](const std::string& s) -> Maybe<Parser<char>::resultType> {
+			if (s.empty()) return std::nullopt;
 			return Parser<char>::resultType(s.data() + 1, s.front());
 	});
 
