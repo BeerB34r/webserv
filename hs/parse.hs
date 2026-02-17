@@ -61,11 +61,6 @@ parseAnyOf = foldr ((<|>) . parseChar) empty
 parseString :: String -> Parser String
 parseString = traverse parseChar
 
-parseSpan :: (Char -> Bool) -> Parser String
-parseSpan f = Parser $ Just . swap . span f
-parseBreak :: (Char -> Bool) -> Parser String
-parseBreak f = Parser $ Just . swap . break f
-
 parsePredicate :: (Char -> Bool) -> Parser Char
 parsePredicate f = Parser $ \case
     (x:xs) -> if f x then Just (xs, x) else Nothing

@@ -26,6 +26,7 @@
 /* ************************************************************************** */
 
 #include <iostream>
+#include <iomanip>
 #include <Parser.hpp>
 
 #ifndef FUN_ALLOWED
@@ -41,7 +42,9 @@ template <printable T>
 auto	_testParser(Parser<T>	parser, const std::string& name, const std::string& testCase) -> void {
 	Maybe<std::pair<std::string,T>>	result = parser(testCase);
 
-	std::cout << "parser " << name << " parsing \"" << testCase << "\" returning -> ";
+	std::cout << "parser "
+		<< std::setw(10) << std::setiosflags(std::iostream::left) << name << std::setw(0)
+		<< " parsing \"" << std::setw(30) << testCase + "\"" << std::setw(0) << " returning -> ";
 	if (result.has_value()) {
 		T			parsed = result.value().second;
 		std::string	remainder = result.value().first;
@@ -64,9 +67,14 @@ auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {
 		return out;
 	};
 	Parser<std::string>	Hstring = singleton >> Hs;
-	Parser<std::string> Truep = Parse::parseString("True");
-	Parser<std::string> Falsep = Parse::parseString("False");
-	Parser<std::string> boolp = Truep | Falsep;
+	Parser<std::string>	Truep = Parse::parseString("True");
+	Parser<std::string>	Falsep = Parse::parseString("False");
+	Parser<std::string>	boolp = Truep | Falsep;
+
+	Parser<std::string>	pp = Parse::many(Parse::parseChar('p'));
+	Parser<std::string> psps = Parse::many(Parse::parseString("ps"));
+	Parser<std::string>	reqpp = Parse::some(Parse::parseChar('p'));
+	Parser<std::string> reqpsps = Parse::some(Parse::parseString("ps"));
 
 	if (FUN_ALLOWED)
 		std::cout << "LETS FUCKING GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO!!!!\n";
@@ -85,5 +93,17 @@ auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {
 	testParser(Truep, "False, and thats humbug");
 	testParser(Falsep, "False, and thats humbug");
 	testParser(boolp, "False, and thats humbug");
+	testParser(pp, "pppppfoo");
+	testParser(pp, "pfoo");
+	testParser(pp, "foo");
+	testParser(psps, "pspspspspsfoo");
+	testParser(psps, "psfoo");
+	testParser(psps, "foo");
+	testParser(reqpp, "pppppfoo");
+	testParser(reqpp, "pfoo");
+	testParser(reqpp, "foo");
+	testParser(reqpsps, "pspspspspsfoo");
+	testParser(reqpsps, "psfoo");
+	testParser(reqpsps, "foo");
 	return (0);
 }

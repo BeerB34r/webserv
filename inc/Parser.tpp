@@ -77,8 +77,8 @@ auto	operator*(Parser<std::function<I(T)>> lhs, Parser<T> rhs) noexcept -> Parse
 template <typename T>
 auto	operator|(Parser<T> lhs, Parser<T> rhs) noexcept -> Parser<T> {
 	Parser<T>	out([lhs, rhs](const std::string& s) -> Maybe<Pair<std::string,T>> {
-			if (lhs(s).has_value()) return lhs(s);
-			return rhs(s);
+			Maybe<Pair<std::string,T>>	lres = lhs(s);
+			return lres.has_value() ? lres : rhs(s);
 	});
 	return out;
 }

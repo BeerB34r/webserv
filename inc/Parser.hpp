@@ -89,6 +89,11 @@ namespace Parse {
 	auto	parseAnyOf(const std::string&) noexcept -> Parser<char>;
 	auto	parsePredicate(std::function<bool(char)>) noexcept -> Parser<char>;
 	auto	parseString(const std::string&) noexcept -> Parser<std::string>;
+
+	auto	many(const Parser<char>) noexcept -> Parser<std::string>;
+	auto	many(const Parser<std::string>) noexcept -> Parser<std::string>;
+	auto	some(const Parser<char>) noexcept -> Parser<std::string>;
+	auto	some(const Parser<std::string>) noexcept -> Parser<std::string>;
 }
 
 #include "Parser.tpp" // implementation
