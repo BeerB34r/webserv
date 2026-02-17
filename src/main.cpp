@@ -56,11 +56,17 @@ auto	_testParser(Parser<T>	parser, const std::string& name, const std::string& t
 #define testParser(parser, testCase) _testParser(parser, #parser, testCase)
 
 auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {
-	Parser<char>	any = Parse::parseAny();
-	Parser<char>	Hs	= Parse::parseChar('H');
-	Parser<char>	hs	= Parse::parseChar('H');
-
-	std::string	testCase = "Hello, World!";
+	Parser<char>		any = Parse::parseAny();
+	Parser<char>		Hs	= Parse::parseChar('H');
+	Parser<char>		hs	= Parse::parseChar('H');
+	std::function<std::string(char)>	singleton = [](char c) -> std::string {
+		std::string	out(1, c);
+		return out;
+	};
+	Parser<std::string>	Hstring = singleton >> Hs;
+	Parser<std::string> Truep = Parse::parseString("True");
+	Parser<std::string> Falsep = Parse::parseString("False");
+	Parser<std::string> boolp = Truep | Falsep;
 
 	if (FUN_ALLOWED)
 		std::cout << "LETS FUCKING GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO!!!!\n";
@@ -68,9 +74,16 @@ auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {
 		std::cout << "Hello, World!\n";
 	testParser(any, "Hello, World!");
 	testParser(Hs, "Hello, World!");
+	testParser(Hstring, "Hello, World!");
 	testParser(hs, "Hello, World!");
 	testParser(any, "foo bar baz");
-	testParser(Hs, "foo bar baz");
+	testParser(Hstring, "foo bar baz");
 	testParser(hs, "foo bar baz");
+	testParser(Truep, "True, and thats True");
+	testParser(Falsep, "True, and thats True");
+	testParser(boolp, "True, and thats True");
+	testParser(Truep, "False, and thats humbug");
+	testParser(Falsep, "False, and thats humbug");
+	testParser(boolp, "False, and thats humbug");
 	return (0);
 }

@@ -10,7 +10,7 @@ INC				=	-I$(INCDIR)
 INCDIR			:=	inc/
 VPATH			=	$(SRCDIR)
 CXXFLAGS		?=	-Wall -Wextra -Werror -pedantic
-CPPFLAGS		=	$(INC) -std=c++20
+CPPFLAGS		=	$(INC) -std=c++2b
 LDFLAGS			:=
 CXX				:=	c++
 RM				:=	rm -fr
@@ -43,6 +43,9 @@ $(BINDIR)%.o	:	%.cpp | $(BINDIR)
 
 %/				:
 	@mkdir -p $@
+
+run				:	$(NAME)
+	./$(NAME)
 
 clean			:
 	$(RM) $(BINDIR)
