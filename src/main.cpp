@@ -27,6 +27,7 @@
 
 #include <iostream>
 #include <iomanip>
+#include <fstream>
 #include <Parser.hpp>
 #include <HttpMessage.hpp>
 
@@ -61,43 +62,62 @@ std::function<std::string(std::vector<std::string>)>	concat = [](std::vector<std
 #define testParser(parser, testCase) _testParser(parser, #parser, testCase)
 
 auto	testipv6(void) -> void {
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "::FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "::FFFF:FFFF:FFFF:FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF::FFFF:FFFF:FFFF:FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "::FFFF:FFFF:FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF::FFFF:FFFF:FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF::FFFF:FFFF:FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "::FFFF:FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF::FFFF:FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF::FFFF:FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF::FFFF:FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "::FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF::FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF::FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF::FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF:FFFF::FFFF:FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "::FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF::FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF::FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF::FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF:FFFF::FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF::FFFF:FFFFend of string");
-	testParser(HTTP::ipv6address, "::FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF::FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF::FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF::FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF:FFFF::FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF::FFFFend of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF:FFFF::FFFFend of string");
-	testParser(HTTP::ipv6address, "::end of string");
-	testParser(HTTP::ipv6address, "FFFF::end of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF::end of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF::end of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF:FFFF::end of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF::end of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF:FFFF::end of string");
-	testParser(HTTP::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF::end of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "::FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "::FFFF:FFFF:FFFF:FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF::FFFF:FFFF:FFFF:FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "::FFFF:FFFF:FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF::FFFF:FFFF:FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF::FFFF:FFFF:FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "::FFFF:FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF::FFFF:FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF::FFFF:FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF::FFFF:FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "::FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF::FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF::FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF::FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF:FFFF::FFFF:FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "::FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF::FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF::FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF::FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF:FFFF::FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF::FFFF:FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "::FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF::FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF::FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF::FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF:FFFF::FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF::FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF:FFFF::FFFFend of string");
+	testParser(HTTPparsing::ipv6address, "::end of string");
+	testParser(HTTPparsing::ipv6address, "FFFF::end of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF::end of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF::end of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF:FFFF::end of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF::end of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF:FFFF::end of string");
+	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF::end of string");
+}
+
+auto	readhttp(std::string file) -> void {
+	std::ifstream	filestream(file);
+	std::ostringstream	oss;
+	oss << filestream.rdbuf();
+	std::string	input = oss.str();
+	std::pair<std::string,std::string>	one = (HTTPparsing::startLine < HTTPparsing::crlf)(input).value();
+	std::cout << "startline done" << std::endl;
+	std::pair<std::string,std::vector<std::string>> two = (HTTPparsing::fieldLines < HTTPparsing::crlf)(one.first).value();
+	std::cout << "fieldLines done" << std::endl;
+	std::pair<std::string,std::string>	three = (HTTPparsing::messageBody)(two.first).value();
+	std::cout << "startline: " << one.second << std::endl;
+	std::cout << "fieldlines: [\n";
+	for (std::string s : two.second) {
+		std::cout << "\t" << s << "\n";
+	}
+	std::cout << std::endl;
+	std::cout << "messagebody: " << three.second << std::endl;
 }
 
 auto	testParsers(void) -> void {
@@ -112,13 +132,12 @@ auto	testParsers(void) -> void {
 	Parser<std::string>	Truep = Parse::parseString("True");
 	Parser<std::string>	Falsep = Parse::parseString("False");
 	Parser<std::string>	boolp = Truep | Falsep;
-
-	Parser<std::string>	pp = Parse::many(Parse::parseChar('p'));
+	Parser<std::string>	pp = Parse::many(Parse::parseChar('p')); 
 	Parser<std::string>	psps = concat >> Parse::many(Parse::parseString("ps"));
 	Parser<std::string>	reqpp = Parse::some(Parse::parseChar('p'));
 	Parser<std::string>	reqpsps = concat >> Parse::some(Parse::parseString("ps"));
 
-	Parser<std::string>	scrubWs = HTTP::ows > HTTP::token < HTTP::ows;
+	Parser<std::string>	scrubWs = HTTPparsing::ows > HTTPparsing::token < HTTPparsing::ows;
 
 	testParser(any, "Hello, World!");
 	testParser(Hs, "Hello, World!");
@@ -145,13 +164,15 @@ auto	testParsers(void) -> void {
 	testParser(reqpsps, "pspspspspsfoo");
 	testParser(reqpsps, "psfoo");
 	testParser(reqpsps, "foo");
-	testParser(HTTP::fieldContent, "foobarbaz ");
-	testParser(HTTP::fieldContent, "foobarbaz foo");
-	testParser(HTTP::fieldContent, "foo  barbaz foo   \tf\t");
-	testParser(HTTP::fieldContent, "   foo  barbaz foo");
+	testParser(HTTPparsing::fieldContent, "foobarbaz ");
+	testParser(HTTPparsing::fieldContent, "foobarbaz foo");
+	testParser(HTTPparsing::fieldContent, "foo  barbaz foo   \tf\t");
+	testParser(HTTPparsing::fieldContent, "   foo  barbaz foo");
 	testParser(scrubWs, "  bar  baz");
 	testParser(scrubWs, "bar  baz  ");
 	testParser(scrubWs, "bar");
+	readhttp("../hs/response.http");
+	readhttp("../hs/request.http");
 }
 
 auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {

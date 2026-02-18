@@ -136,7 +136,8 @@ private:
 protected:
 };
 
-namespace HTTP {
+// horrible, do not touch
+namespace HTTPparsing {
 	template <typename T>
 	using Func = std::function<T>;
 	using String = std::string;
@@ -175,6 +176,25 @@ namespace HTTP {
 	extern const Parser<String>	regName;
 	extern const Parser<String>	ipvfuture;
 	extern const Parser<String>	ipv6address;
+	extern const Parser<String>	ipLiteral;
+	extern const Parser<String>	host;
+	extern const Parser<String>	uriHost;
+	extern const Parser<String>	userinfo;
+	extern const Parser<String>	authority;
+	extern const Parser<String>	hierPart;
+	extern const Parser<String>	scheme;
+	extern const Parser<String>	absoluteURI;
+	extern const Parser<String>	absolutePath;
+	extern const Parser<String>	reasonPhrase;
+	extern const Parser<String>	statusCode;
+	extern const Parser<String>	statusLine;
+	extern const Parser<String>	asteriskForm;
+	extern const Parser<String>	authorityForm;
+	extern const Parser<String>	absoluteForm;
+	extern const Parser<String>	originForm;
+	extern const Parser<String>	requestTarget;
+	extern const Parser<String>	requestLine;
+	extern const Parser<String>	startLine;
 	extern const Parser<String>	messageBody;
 }
 

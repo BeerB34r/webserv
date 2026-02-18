@@ -100,7 +100,7 @@ auto	operator<(Parser<T> lhs, Parser<I> rhs) noexcept -> Parser<T> {
 	Parser<T>	out([lhs, rhs](const std::string& s) -> Maybe<Pair<std::string,T>> {
 			Maybe<Pair<std::string,T>>	lres = lhs(s);
 			if (!lres.has_value()) return std::nullopt;
-			Maybe<Pair<std::string,T>>	rres = rhs(lres.value().first);
+			Maybe<Pair<std::string,I>>	rres = rhs(lres.value().first);
 			if (!rres.has_value()) return std::nullopt;
 			return std::make_pair(rres.value().first, lres.value().second);
 	});

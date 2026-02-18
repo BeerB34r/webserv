@@ -29,34 +29,34 @@
 #include <Parser.hpp>
 #include <HttpMessage.hpp>
 
-namespace HTTP {
+namespace HTTPparsing {
 	using namespace Parse;
 	template <typename T>
 	using Fn = std::function<T>; // rust mentioned???????
 	using String = std::string;
 
 	// what if we made functions be variables instead of functions :flushed:
-	Fn<String(char)>	singleton = [](char c) noexcept -> String {
+	static Fn<String(char)>	singleton = [](char c) noexcept -> String {
 		String	out;
 		return out + c;
 	};
 
-	Fn<String(std::vector<String>)>	concat = [](std::vector<String> v) noexcept -> String {
+	static Fn<String(std::vector<String>)>	concat = [](std::vector<String> v) noexcept -> String {
 		String	out;
 		for (std::string s : v) out.append(s);
 		return out;
 	};
-	Fn<bool(char)>	ishexdigit = [](char c) noexcept -> bool {
+	static Fn<bool(char)>	ishexdigit = [](char c) noexcept -> bool {
 		const static std::string hexdigits = "0123456789ABCDEF"; // case sensitive, cuz so is the RFC
 		return hexdigits.contains(c);
 	};
 
 	// haskell programmers be like:
 	// look at what they need to mimic a fraction of our power
-	Fn<Fn<String(String)>(char)>	prependChar = [](char prefix) noexcept -> Fn<String(String)> {
+	static Fn<Fn<String(String)>(char)>	prependChar = [](char prefix) noexcept -> Fn<String(String)> {
 		return [prefix](String postfix) { return prefix + postfix; };
 	};
-	Fn<Fn<String(String)>(String)>	prependString = [](String prefix) noexcept -> Fn<String(String)> {
+	static Fn<Fn<String(String)>(String)>	prependString = [](String prefix) noexcept -> Fn<String(String)> {
 		return [prefix](String postfix) { return prefix + postfix; };
 	};
 
