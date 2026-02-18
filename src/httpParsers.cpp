@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                            ::::::::        */
-/*   Parser.hpp                                              :+:    :+:       */
+/*   httpParsers.cpp                                         :+:    :+:       */
 /*                                                          +:+               */
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
-/*   Created: 2026/02/16 18:19:11 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/02/16 19:02:09 by mde-beer            ########   odam.nl   */
+/*   Created: 2026/02/18 15:40:43 by mde-beer            #+#    #+#           */
+/*   Updated: 2026/02/18 15:53:13 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -25,77 +25,43 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
-#ifndef PARSER_HPP
-# define PARSER_HPP
+#include <Parser.hpp>
+#include <HttpMessage.hpp>
 
-#include <functional>
-#include <optional>
-#include <string>
-#include <utility>
-
-template <typename T>
-using Maybe = std::optional<T>;
-
-template <typename T, typename I>
-using Pair = std::pair<T,I>;
-
-template <typename T>
-class Parser {
-public:
-	using resultType = Pair<std::string,T>;
-
-	Parser() = delete;
-	Parser(std::function<Maybe<resultType>(const std::string&)>) noexcept;
-	Parser(const Parser&) noexcept;
-	Parser&	operator =(const Parser&) noexcept = default;
-	virtual	~Parser() noexcept = default;
-
-	auto	runParser(const std::string&) const noexcept -> Maybe<resultType>;
-	auto	operator()(const std::string&) const noexcept -> Maybe<resultType>;
-
-	//	Parser is now a functor
-	template <typename I>
-	auto	fmap(std::function<I(T)>) noexcept -> Parser<I>;
-
-private:
-	const std::function<Maybe<resultType>(const std::string&)>	f;
-};
-
-// synonym for fmap
-template <typename T, typename I>
-auto	operator>>(std::function<I(T)>, Parser<T>) noexcept -> Parser<I>;
-
-// sequential application (half of proving Parser is an Applicative)
-template <typename T, typename I>
-auto	operator*(Parser<std::function<I(T)>>, Parser<T>) noexcept -> Parser<I>;
-
-// alternative application (half of proving Parser is an Alternative)
-template <typename T>
-auto	operator|(Parser<T>, Parser<T>) noexcept -> Parser<T>;
-
-namespace Parse {
-	template<typename T>
-	auto	pure(T x) noexcept -> Parser<T>;
-
-	template<typename T>
-	auto	empty() noexcept -> Parser<T>;
-
+namespace HTTP {
 	template <typename T>
-	auto	parseOpt(T, Parser<T>) noexcept -> Parser<T>;
-	auto	parseAny() noexcept -> Parser<char>;
+	using Func = std::function<T>;
+	using String = std::string;
 
-	auto	parseChar(char) noexcept -> Parser<char>;
-	auto	parseAnyOf(const std::string&) noexcept -> Parser<char>;
-	auto	parsePredicate(std::function<bool(char)>) noexcept -> Parser<char>;
-	auto	parseString(const std::string&) noexcept -> Parser<std::string>;
+	Func<String(char)>	singleton = [](char c) -> String {
+		String	out;
+		return out + c;
+	};
 
-	auto	many(const Parser<char>) noexcept -> Parser<std::string>;
-	auto	many(const Parser<std::string>) noexcept -> Parser<std::string>;
-	auto	some(const Parser<char>) noexcept -> Parser<std::string>;
-	auto	some(const Parser<std::string>) noexcept -> Parser<std::string>;
-}
-
-
-#include "Parser.tpp" // template implementation
-
-#endif // PARSER_HPP
+	// http business parsing, in no particular order
+	extern const Parser<char>	tchar = Parse::parseAnyOf({'!', '#', '$', '%', '&', '\\', '*', '+', '-', '.', '^', '_', '`', '|', '~'}) | Parse::parsePredicate(isdigit) | Parse::parsePredicate(isalpha);
+	extern const Parser<char>	vchar = Parse::parsePredicate([](unsigned char c) -> bool { return (c >= 0x21 && 0x7E >= c) ? true : false; });
+	extern const Parser<char>	obsText = Parse::parsePredicate([](unsigned char c) -> bool { return (c >= 0x80 && 0xFF >= c) ? true : false; });
+	extern const Parser<char>	fieldVchar = vchar | obsText;
+	extern const Parser<String>	ows = Parse::many(Parse::parseAnyOf({' ', '\t'}));
+	extern const Parser<String>	rws = Parse::some(Parse::parseAnyOf({' ', '\t'}));
+	extern const Parser<String>	crlf = Parse::parseString("\r\n");
+	extern const Parser<String>	token = Parse::some(tchar);
+	extern const Parser<String>	method = token;
+	Func<Func<String(String)>(char)>	fieldContentHelper = [](char c) -> Func<String(String)> {
+		return [c](String s) { return c + s; };
+	};
+	extern const Parser<String>	fieldContent = (fieldContentHelper >> fieldVchar) * (Parse::parseOpt<String>("", Parser<String>([](const String& s) noexcept -> Maybe<Pair<String,String>> {
+				Maybe<Pair<String,String>>	greedy = Parse::some(Parse::parseAnyOf({' ', '\t'}) | fieldVchar)(s);
+				if (!greedy.has_value()) return std::nullopt;
+				String	reversedx = greedy.value().second;
+				std::reverse(reversedx.begin(), reversedx.end());
+				Maybe<Pair<String,String>>	ungreed = Parse::many(Parse::parseAnyOf({' ', '\t'}))(reversedx); // many _never_ returns error
+				String	reversedgot = ungreed.value().second;
+				String	reverseddropped = ungreed.value().first;
+				std::reverse(reversedgot.begin(), reversedgot.end());
+				std::reverse(reverseddropped.begin(), reverseddropped.end());
+				return std::make_pair(reversedgot + greedy.value().first, reverseddropped);
+	})));
+	extern const Parser<String>	messageBody = Parse::many(Parse::parseAny());
+} // namespace HTTP

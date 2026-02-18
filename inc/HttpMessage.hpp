@@ -123,6 +123,7 @@
 //
 // message-body		=	*OCTET ; any amount of any characters :fire:
 
+#include "Parser.hpp"
 class	HttpMessage {
 public:
 	HttpMessage();
@@ -134,5 +135,22 @@ private:
 	
 protected:
 };
+
+namespace HTTP {
+	template <typename T>
+	using Func = std::function<T>;
+	using String = std::string;
+
+	extern const Parser<char>	tchar;
+	extern const Parser<char>	vchar;
+	extern const Parser<char>	obsText;
+	extern const Parser<char>	fieldVchar;
+	extern const Parser<String>	ows;
+	extern const Parser<String>	rws;
+	extern const Parser<String>	crlf;
+	extern const Parser<String>	token;
+	extern const Parser<String>	fieldContent;
+	extern const Parser<String>	messageBody;
+}
 
 #endif // HTTPMESSAGE_HPP

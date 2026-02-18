@@ -28,6 +28,7 @@
 #ifndef PARSER_TPP
 # define PARSER_TPP
 # include <Parser.hpp>
+#include <iostream>
 
 template <typename T>
 Parser<T>::Parser(std::function<Maybe<Parser<T>::resultType>(const std::string&)> func) noexcept : f(func) {};
@@ -47,8 +48,8 @@ auto	Parser<T>::operator()(const std::string& s) const noexcept -> Maybe<resultT
 template <typename T>
 template <typename I>
 auto	Parser<T>::fmap(std::function<I(T)>	func) noexcept -> Parser<I> {
-	Parser<I>	out([this, func](const std::string& s) noexcept -> Maybe<std::pair<std::string,I>> {
-			Maybe<Parser<T>::resultType>	inner = this->runParser(s);
+	Parser<I>	out([*this, func](const std::string& s) noexcept -> Maybe<std::pair<std::string,I>> {
+			Maybe<Parser<T>::resultType>	inner = (*this).runParser(s);
 			if (inner.has_value()) {
 				return std::make_pair(inner.value().first, func(inner.value().second));
 			}
