@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/02/16 18:19:11 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/02/18 16:22:31 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/02/18 16:55:59 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -96,9 +96,9 @@ namespace Parse {
 	auto	parseString(const std::string&) noexcept -> Parser<std::string>;
 
 	auto	many(const Parser<char>) noexcept -> Parser<std::string>;
-	auto	many(const Parser<std::string>) noexcept -> Parser<std::string>;
+	auto	many(const Parser<std::string>) noexcept -> Parser<std::vector<std::string>>;
 	auto	some(const Parser<char>) noexcept -> Parser<std::string>;
-	auto	some(const Parser<std::string>) noexcept -> Parser<std::string>;
+	auto	some(const Parser<std::string>) noexcept -> Parser<std::vector<std::string>>;
 }
 
 

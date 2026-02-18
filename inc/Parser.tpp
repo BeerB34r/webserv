@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/02/16 18:59:51 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/02/16 19:01:06 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/02/18 19:09:16 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -112,6 +112,7 @@ auto	Parse::pure(T x) noexcept -> Parser<T> {
 	Parser<T>	out([x](const std::string& s) -> Maybe<Pair<std::string,T>> {
 			return std::make_pair(s, x);
 	});
+	return out;
 }
 
 template <typename T>

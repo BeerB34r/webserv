@@ -135,7 +135,7 @@ ipv6address = ((++) <$> h16c <*> ((++) <$> h16c <*> ((++) <$> h16c <*> ((++) <$>
     <|> ((++) <$> parseOpt "" ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> h16))))) <*> ((++) <$> parseString "::" <*> h16))
     <|> ((++) <$> parseOpt "" ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> ((++) <$> parseOpt "" h16c <*> h16)))))) <*> parseString "::")
     where
-        h16c = flip (:) <$> h16 <*> parseChar ':'
+        h16c = reverse <$> (flip (:) <$> h16 <*> parseChar ':')
 ipvfuture :: Parser String
 ipvfuture = (:) <$> parseChar 'v' <*> ((++) <$> some (parsePredicate isHexDigit) <*> ((:) <$> parseChar '.' <*> some (unreserved <|> subDelims <|> parseChar ':')))
 ipv4address :: Parser String
@@ -192,6 +192,7 @@ subDelims = parseAnyOf ['!', '$', '&', '\\', '(', ')', '*', '+', ',', ':', '=' ]
 httpVersion :: Parser String
 httpVersion = (\a b c d e -> a ++ b ++ c ++ d ++ e) <$> parseString "HTTP" <*> (singleton <$> parseChar '/') <*> (singleton <$> parsePredicate isDigit) <*> (singleton <$> parseChar '.') <*> (singleton <$> parsePredicate isDigit)
 
+fieldLines :: Parser [String]
 fieldLines = many (fieldLine <* crlf)
 
 fieldLine :: Parser String

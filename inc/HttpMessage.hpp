@@ -149,7 +149,32 @@ namespace HTTP {
 	extern const Parser<String>	rws;
 	extern const Parser<String>	crlf;
 	extern const Parser<String>	token;
+	extern const Parser<String>	pctEncoded;
+	extern const Parser<char>	subDelims;
+	extern const Parser<String>	method;
 	extern const Parser<String>	fieldContent;
+	extern const Parser<String>	fieldValue;
+	extern const Parser<String>	fieldName;
+	extern const Parser<String>	fieldLine;
+	extern const Parser<std::vector<String>>	fieldLines;
+	extern const Parser<String>	httpVersion;
+	extern const Parser<char>	unreserved;
+	extern const Parser<String>	pchar;
+	extern const Parser<String>	query;
+	extern const Parser<String>	segmentNz;
+	extern const Parser<String>	segment;
+	extern const Parser<String>	pathEmpty;
+	extern const Parser<String>	pathRootless;
+	extern const Parser<String>	pathAbsolute;
+	extern const Parser<String>	pathAbempty;
+	extern const Parser<String>	decOctet;
+	extern const Parser<String>	h16;
+	extern const Parser<String>	ipv4address;
+	extern const Parser<String>	ls32;
+	extern const Parser<String>	port;
+	extern const Parser<String>	regName;
+	extern const Parser<String>	ipvfuture;
+	extern const Parser<String>	ipv6address;
 	extern const Parser<String>	messageBody;
 }
 

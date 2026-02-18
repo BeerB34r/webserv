@@ -93,12 +93,12 @@ auto	Parse::many(const Parser<char> p) noexcept -> Parser<std::string> {
 	return out;
 }
 
-auto	Parse::many(const Parser<std::string> p) noexcept -> Parser<std::string> {
-	Parser<std::string>	out([p](const std::string& s) noexcept -> Maybe<Pair<std::string,std::string>> {
+auto	Parse::many(const Parser<std::string> p) noexcept -> Parser<std::vector<std::string>> {
+	Parser<std::vector<std::string>>	out([p](const std::string& s) noexcept -> Maybe<Pair<std::string,std::vector<std::string>>> {
 			std::string	remainder(s);
-			std::string	result;
+			std::vector<std::string>	result;
 			for (Maybe<Pair<std::string,std::string>> current = p(s); current.has_value(); current = p(remainder)) {
-				result += (current.value().second);
+				result.push_back((current.value().second));
 				remainder = current.value().first;
 			}
 			return std::make_pair(remainder, result);
@@ -116,9 +116,9 @@ auto	Parse::some(const Parser<char> p) noexcept -> Parser<std::string> {
 	return out;
 }
 
-auto	Parse::some(const Parser<std::string> p) noexcept -> Parser<std::string> {
-	Parser<std::string> out([p](const std::string& s) noexcept -> Maybe<Pair<std::string,std::string>> {
-			Maybe<Pair<std::string,std::string>>	result = many(p)(s);
+auto	Parse::some(const Parser<std::string> p) noexcept -> Parser<std::vector<std::string>> {
+	Parser<std::vector<std::string>> out([p](const std::string& s) noexcept -> Maybe<Pair<std::string,std::vector<std::string>>> {
+			Maybe<Pair<std::string,std::vector<std::string>>>	result = many(p)(s);
 			if (!result.has_value()) return std::nullopt;
 			if (!result.value().second.size()) return std::nullopt;
 			return result;
