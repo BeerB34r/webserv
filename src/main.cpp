@@ -69,9 +69,11 @@ auto	testParsers(void) -> void {
 	Parser<std::string>	boolp = Truep | Falsep;
 
 	Parser<std::string>	pp = Parse::many(Parse::parseChar('p'));
-	Parser<std::string> psps = Parse::many(Parse::parseString("ps"));
+	Parser<std::string>	psps = Parse::many(Parse::parseString("ps"));
 	Parser<std::string>	reqpp = Parse::some(Parse::parseChar('p'));
-	Parser<std::string> reqpsps = Parse::some(Parse::parseString("ps"));
+	Parser<std::string>	reqpsps = Parse::some(Parse::parseString("ps"));
+
+	Parser<std::string>	scrubWs = HTTP::ows > HTTP::token < HTTP::ows;
 
 	testParser(any, "Hello, World!");
 	testParser(Hs, "Hello, World!");
@@ -102,6 +104,9 @@ auto	testParsers(void) -> void {
 	testParser(HTTP::fieldContent, "foobarbaz foo");
 	testParser(HTTP::fieldContent, "foo  barbaz foo   \tf\t");
 	testParser(HTTP::fieldContent, "   foo  barbaz foo");
+	testParser(scrubWs, "  bar  baz");
+	testParser(scrubWs, "bar  baz  ");
+	testParser(scrubWs, "bar");
 }
 
 auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {

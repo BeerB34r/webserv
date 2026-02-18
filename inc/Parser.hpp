@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/02/16 18:19:11 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/02/16 19:02:09 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/02/18 16:22:31 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -72,6 +72,12 @@ auto	operator*(Parser<std::function<I(T)>>, Parser<T>) noexcept -> Parser<I>;
 // alternative application (half of proving Parser is an Alternative)
 template <typename T>
 auto	operator|(Parser<T>, Parser<T>) noexcept -> Parser<T>;
+
+// evaluate both sequentially, return only one
+template <typename T, typename I>
+auto	operator>(Parser<T>, Parser<I>) noexcept -> Parser<I>;
+template <typename T, typename I>
+auto	operator<(Parser<T>, Parser<I>) noexcept -> Parser<T>;
 
 namespace Parse {
 	template<typename T>
