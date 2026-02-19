@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/02/19 16:07:22 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/02/19 17:20:16 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/02/19 17:30:46 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -44,6 +44,9 @@ auto	readHTTPmessage(const String& s) noexcept -> Maybe<HTTPMessage> {
 	if (!startlineParseRes) return std::nullopt;
 	Maybe<Parser<std::vector<String>>::resultType>	fieldlinesParseRes = (HTTPparsing::fieldLines < HTTPparsing::crlf)(startlineParseRes->first);
 	if (!fieldlinesParseRes) return std::nullopt;
+	// [TODO]: check for Content-Length field and fail if theres a mismatch
+	// NOTE: since this takes strings, that might happen even earlier? will
+	// investigate as it becomes relevant -Mats
 	Maybe<Parser<String>::resultType>	bodyParseRes = HTTPparsing::messageBody(fieldlinesParseRes->first);
 	if (!bodyParseRes) return std::nullopt;
 	return HTTPMessage(startlineParseRes->second, fieldlinesParseRes->second, bodyParseRes->second);
