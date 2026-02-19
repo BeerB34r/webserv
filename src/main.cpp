@@ -106,10 +106,9 @@ auto	readhttp(std::string file) -> void {
 	std::ostringstream	oss;
 	oss << filestream.rdbuf();
 	std::string	input = oss.str();
+	std::cout << "parsing \"" << file << "\"\n";
 	std::pair<std::string,std::string>	one = (HTTPparsing::startLine < HTTPparsing::crlf)(input).value();
-	std::cout << "startline done" << std::endl;
 	std::pair<std::string,std::vector<std::string>> two = (HTTPparsing::fieldLines < HTTPparsing::crlf)(one.first).value();
-	std::cout << "fieldLines done" << std::endl;
 	std::pair<std::string,std::string>	three = (HTTPparsing::messageBody)(two.first).value();
 	std::cout << "startline: " << one.second << std::endl;
 	std::cout << "fieldlines: [\n";
@@ -117,7 +116,7 @@ auto	readhttp(std::string file) -> void {
 		std::cout << "\t" << s << "\n";
 	}
 	std::cout << std::endl;
-	std::cout << "messagebody: " << three.second << std::endl;
+	std::cout << "messagebody:\n\"" << three.second << "\"\n";
 }
 
 auto	testParsers(void) -> void {
@@ -171,8 +170,8 @@ auto	testParsers(void) -> void {
 	testParser(scrubWs, "  bar  baz");
 	testParser(scrubWs, "bar  baz  ");
 	testParser(scrubWs, "bar");
-	readhttp("../hs/response.http");
-	readhttp("../hs/request.http");
+	readhttp("hs/response.http");
+	readhttp("hs/request.http");
 }
 
 auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {
