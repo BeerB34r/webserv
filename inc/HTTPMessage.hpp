@@ -56,6 +56,8 @@ protected:
 };
 
 auto	readHTTPmessage(const std::string&) noexcept -> Maybe<HTTPMessage>;
+auto	readHTTPrequest(const std::string&) noexcept -> Maybe<HTTPMessage>;
+auto	readHTTPresponse(const std::string&) noexcept -> Maybe<HTTPMessage>;
 auto	operator<<(std::ostream&, const HTTPMessage&) noexcept -> std::ostream&;
 
 #endif // HTTPMESSAGE_HPP
