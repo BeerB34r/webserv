@@ -27,8 +27,8 @@
 
 #ifndef PARSER_TPP
 # define PARSER_TPP
-# include <Parser.hpp>
-#include <iostream>
+
+#include <Parser.hpp>
 #include <utility>
 
 template <typename T>

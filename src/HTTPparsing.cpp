@@ -1,7 +1,7 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                            ::::::::        */
-/*   httpParsers.cpp                                         :+:    :+:       */
+/*   HTTPparsing.cpp                                         :+:    :+:       */
 /*                                                          +:+               */
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
@@ -25,9 +25,8 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
-#include <string>
 #include <Parser.hpp>
-#include <HttpMessage.hpp>
+#include <HTTPparsing.hpp>
 
 namespace HTTPparsing {
 	using namespace Parse;

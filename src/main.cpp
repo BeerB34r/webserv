@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/02/16 19:03:36 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/02/16 19:25:24 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/02/19 16:49:40 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -29,7 +29,8 @@
 #include <iomanip>
 #include <fstream>
 #include <Parser.hpp>
-#include <HttpMessage.hpp>
+#include <HTTPMessage.hpp>
+#include <HTTPparsing.hpp>
 
 template <typename T>
 concept printable = requires (T a, std::ostream os) {
@@ -107,19 +108,15 @@ auto	readhttp(std::string file) -> void {
 	oss << filestream.rdbuf();
 	std::string	input = oss.str();
 	std::cout << "parsing \"" << file << "\"\n";
-	std::pair<std::string,std::string>	one = (HTTPparsing::startLine < HTTPparsing::crlf)(input).value();
-	std::pair<std::string,std::vector<std::string>> two = (HTTPparsing::fieldLines < HTTPparsing::crlf)(one.first).value();
-	std::pair<std::string,std::string>	three = (HTTPparsing::messageBody)(two.first).value();
-	std::cout << "startline: " << one.second << std::endl;
-	std::cout << "fieldlines: [\n";
-	for (std::string s : two.second) {
-		std::cout << "\t" << s << "\n";
+	Maybe<HTTPMessage>	message = readHTTPmessage(input);
+	if (!message) std::cout << "Nothing\n";
+	else {
+		std::cout << "Just (\n" << message->prettyPrint() << ")\n";
+		std::cout << "machine readable:\n" << *message << "\n\n";
 	}
-	std::cout << std::endl;
-	std::cout << "messagebody:\n\"" << three.second << "\"\n";
 }
 
-auto	testParsers(void) -> void {
+auto	testParserFeatures(void) -> void {
 	Parser<char>		any = Parse::parseAny();
 	Parser<char>		Hs	= Parse::parseChar('H');
 	Parser<char>		hs	= Parse::parseChar('H');
@@ -170,6 +167,9 @@ auto	testParsers(void) -> void {
 	testParser(scrubWs, "  bar  baz");
 	testParser(scrubWs, "bar  baz  ");
 	testParser(scrubWs, "bar");
+}
+
+auto	testHTTPparsing(void) -> void {
 	readhttp("hs/response.http");
 	readhttp("hs/request.http");
 }
@@ -180,6 +180,6 @@ auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {
 #else
 	std::cout << "Hello, World!\n";
 #endif // fun_allowed
-	testParsers();
+	testHTTPparsing();
 	return (0);
 }
