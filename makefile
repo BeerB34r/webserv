@@ -9,7 +9,7 @@ DEPFLAGS		=	-MM -MF $@ -MT $@ -MT $(BINDIR)$(addsuffix .o,$(notdir $(basename $<
 INC				=	-I$(INCDIR)
 INCDIR			:=	inc/
 VPATH			=	$(SRCDIR)
-CXXFLAGS		?=	-Wall -Wextra -Werror -pedantic -ggdb
+CXXFLAGS		?=	-Wall -Wextra -Werror -pedantic
 CPPFLAGS		=	$(INC) -std=c++2b
 LDFLAGS			:=
 CXX				:=	c++
@@ -27,6 +27,12 @@ NAME			=	$(SERIOUS_NAME)
 ifneq ($(origin fun_allowed),undefined)
 	NAME		=	$(FUNNY_NAME)
 	CPPFLAGS	+=	-DFUN_ALLOWED=1
+endif
+
+ifneq ($(origin DEBUG),undefined)
+	CXXFLAGS	+=	-ggdb
+else
+	CXXFLAGS	+= -O3
 endif
 
 -include $(DEP)
