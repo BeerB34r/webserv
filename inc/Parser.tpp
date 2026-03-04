@@ -49,12 +49,10 @@ constexpr auto	Parser<T>::operator()(const std::string& s) const noexcept -> May
 template <typename T>
 template <typename I>
 constexpr auto	Parser<T>::fmap(std::function<I(T)>	func) noexcept -> Parser<I> {
-	return Parser<I>([*this, func](const std::string& s) noexcept -> Maybe<std::pair<std::string,I>> {
+	return Parser<I>([*this, func](const std::string& s) constexpr noexcept -> Maybe<std::pair<std::string,I>> {
 			Maybe<Parser<T>::resultType>	inner = (*this).runParser(s);
-			if (inner.has_value()) {
-				return std::make_pair(inner.value().first, func(inner.value().second));
-			}
-			return std::nullopt;
+			if (!inner) return std::nullopt;
+			return std::make_pair(inner->first, func(inner->second));
 	});
 }
 
@@ -65,60 +63,60 @@ constexpr auto	operator>>(std::function<I (T)> lhs, Parser<T> rhs) noexcept -> P
 
 template <typename T, typename I>
 constexpr auto	operator*(Parser<std::function<I(T)>> lhs, Parser<T> rhs) noexcept -> Parser<I> {
-	return Parser<I>([lhs, rhs](const std::string& s) -> Maybe<Pair<std::string,I>> {
+	return Parser<I>([lhs, rhs](const std::string& s) constexpr noexcept -> Maybe<Pair<std::string,I>> {
 			Maybe<Pair<std::string, std::function<I(T)>>>	lres = lhs(s);
-			if (!lres.has_value()) return std::nullopt;
-			Maybe<Pair<std::string, T>> rres = rhs(lres.value().first);
-			if (!rres.has_value()) return std::nullopt;
-			return std::make_pair(rres.value().first, lres.value().second(rres.value().second));
+			if (!lres) return std::nullopt;
+			Maybe<Pair<std::string, T>> rres = rhs(lres->first);
+			if (!rres) return std::nullopt;
+			return std::make_pair(rres->first, lres->second(rres->second));
 	});
 }
 
 template <typename T>
 constexpr auto	operator|(Parser<T> lhs, Parser<T> rhs) noexcept -> Parser<T> {
-	return Parser<T>([lhs, rhs](const std::string& s) -> Maybe<Pair<std::string,T>> {
+	return Parser<T>([lhs, rhs](const std::string& s) constexpr noexcept -> Maybe<Pair<std::string,T>> {
 			Maybe<Pair<std::string,T>>	lres = lhs(s);
-			return lres.has_value() ? lres : rhs(s);
+			return lres ? lres : rhs(s);
 	});
 }
 
 template <typename T, typename I>
 constexpr auto	operator>(Parser<T> lhs, Parser<I> rhs) noexcept -> Parser<I> {
-	return Parser<I>([lhs, rhs](const std::string& s) -> Maybe<Pair<std::string,I>> {
+	return Parser<I>([lhs, rhs](const std::string& s) constexpr noexcept -> Maybe<Pair<std::string,I>> {
 			Maybe<Pair<std::string,T>>	lres = lhs(s);
-			if (!lres.has_value()) return std::nullopt;
-			return rhs(lres.value().first);
+			if (!lres) return std::nullopt;
+			return rhs(lres->first);
 	});
 };
 
 template <typename T, typename I>
 constexpr auto	operator<(Parser<T> lhs, Parser<I> rhs) noexcept -> Parser<T> {
-	return Parser<T>([lhs, rhs](const std::string& s) -> Maybe<Pair<std::string,T>> {
+	return Parser<T>([lhs, rhs](const std::string& s) constexpr noexcept -> Maybe<Pair<std::string,T>> {
 			Maybe<Pair<std::string,T>>	lres = lhs(s);
-			if (!lres.has_value()) return std::nullopt;
-			Maybe<Pair<std::string,I>>	rres = rhs(lres.value().first);
-			if (!rres.has_value()) return std::nullopt;
-			return std::make_pair(rres.value().first, lres.value().second);
+			if (!lres) return std::nullopt;
+			Maybe<Pair<std::string,I>>	rres = rhs(lres->first);
+			if (!rres) return std::nullopt;
+			return std::make_pair(rres->first, lres->second);
 	});
 };
 
 template <typename T>
 constexpr auto	Parse::pure(T x) noexcept -> Parser<T> {
-	return Parser<T>([x](const std::string& s) -> Maybe<Pair<std::string,T>> {
+	return Parser<T>([x](const std::string& s) constexpr noexcept -> Maybe<Pair<std::string,T>> {
 			return std::make_pair(s, x);
 	});
 }
 
 template <typename T>
 constexpr auto	Parse::empty() noexcept -> Parser<T> {
-	return Parser<T>([]([[maybe_unused]] const std::string& s) -> Maybe<std::pair<std::string,T>> {
+	return Parser<T>([]([[maybe_unused]] const std::string& s) constexpr noexcept -> Maybe<std::pair<std::string,T>> {
 			return std::nullopt;
 	});
 }
 
 template <typename T>
 constexpr auto	Parse::parseOpt(T x, Parser<T> p) noexcept -> Parser<T> {
-	return Parser<T>([x, p](const std::string& s) -> Maybe<Pair<std::string,T>> const {
+	return Parser<T>([x, p](const std::string& s) constexpr noexcept -> Maybe<Pair<std::string,T>> const {
 			return p(s).value_or(std::make_pair(s, x));
 	});
 }
@@ -138,7 +136,7 @@ auto	Parse::many(const Parser<T> p) noexcept -> Parser<std::vector<T>> {
 
 template <typename T>
 auto	Parse::some(const Parser<T> p) noexcept -> Parser<std::vector<T>> {
-	return Parser<std::vector<T>>([p](const std::string& s)	noexcept -> Maybe<Pair<std::string,std::vector<T>>> {
+	return Parser<std::vector<T>>([p](const std::string& s)	constexpr noexcept -> Maybe<Pair<std::string,std::vector<T>>> {
 			Maybe<Pair<std::string,std::vector<T>>>	result = many(p)(s);
 			if (!result.has_value()) return std::nullopt;
 			if (!result.value().second.size()) return std::nullopt;
