@@ -132,7 +132,7 @@ auto	HTTPMessage::prettyPrint(void) const noexcept -> const String {
 	std::stringstream	ss;
 	if (requestStatus) {
 		const RequestData	request = std::get<RequestData>(data);
-		ss << request.method << " request\n";
+		ss << toString(request.method) << " request\n";
 		ss << "request target: \"" << request.requestTarget << "\"\n";
 		ss << "version: " << request.httpVersion << "\n";
 	} else {
@@ -162,7 +162,7 @@ auto	operator<<(std::ostream& os, const HTTPMessage& message) noexcept -> std::o
 #define _methodPair(method) {#method, HTTPMessage::method}
 auto	toHTTPMethod(const String& s) noexcept -> HTTPMessage::HTTPMethod {
 	const static int	knownMethodCount = 14;
-	const static struct MethodPair { String s; HTTPMessage::HTTPMethod method; }	methodPairs[knownMethodCount] = {
+	const static struct MethodPair { String s; HTTPMessage::HTTPMethod m; }	methodPairs[knownMethodCount] = {
 		_methodPair(GET),
 		_methodPair(HEAD),
 		_methodPair(POST),
@@ -179,8 +179,31 @@ auto	toHTTPMethod(const String& s) noexcept -> HTTPMessage::HTTPMethod {
 		_methodPair(WRAPPED)
 	};
 
-	for (struct MethodPair pair : methodPairs) {
-		if (pair.s == s) return pair.method;
-	}
+	for (struct MethodPair pair : methodPairs) if (pair.s == s) return pair.m;
 	return HTTPMessage::UNKNOWN;
 }
+
+auto	toString(const HTTPMessage::HTTPMethod& m) noexcept -> String {
+	const static int	knownMethodCount = 15;
+	const static struct MethodPair { String s; HTTPMessage::HTTPMethod m; }	methodPairs[knownMethodCount] = {
+		_methodPair(GET),
+		_methodPair(HEAD),
+		_methodPair(POST),
+		_methodPair(PUT),
+		_methodPair(DELETE),
+		_methodPair(CONNECT),
+		_methodPair(OPTIONS),
+		_methodPair(TRACE),
+		_methodPair(PATCH),
+		_methodPair(MOVE),
+		_methodPair(COPY),
+		_methodPair(LINK),
+		_methodPair(UNLINK),
+		_methodPair(WRAPPED),
+		_methodPair(UNSUPPORTED)
+	};
+
+	for (struct MethodPair p : methodPairs) if (p.m == m) return p.s;
+	return "UNKNOWN";
+}
+#undef _methodPair

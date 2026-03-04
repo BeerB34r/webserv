@@ -100,6 +100,7 @@ auto	readHTTPmessage(const std::string&) noexcept -> Maybe<HTTPMessage>;
 auto	readHTTPrequest(const std::string&) noexcept -> Maybe<HTTPMessage>;
 auto	readHTTPresponse(const std::string&) noexcept -> Maybe<HTTPMessage>;
 auto	toHTTPMethod(const std::string&) noexcept -> HTTPMessage::HTTPMethod;
+auto	toString(const HTTPMessage::HTTPMethod& m) noexcept -> std::string;
 auto	operator<<(std::ostream&, const HTTPMessage&) noexcept -> std::ostream&;
 
 #endif // HTTPMESSAGE_HPP
