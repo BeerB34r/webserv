@@ -178,8 +178,14 @@ auto	testParserFeatures(void) -> void {
 
 auto inline	testHTTPparsingfile(const std::string& fname) {
 	std::cout << "time to parse: " << fname << "\n";
-	std::cout << "\n" << stopwatch([fname](){ readhttp(fname); });
+	std::cout << "\n" << stopwatch([fname](){ readhttp(fname); }) <<  "\n";
 }
+
+#ifdef FUN_ALLOWED
+bool	g_funAllowed = true;
+#else
+bool	g_funAllowed = false;
+#endif // FUN_ALLOWED
 
 auto	testHTTPparsing(void) -> void {
 	testHTTPparsingfile("hs/response.http");
@@ -187,11 +193,10 @@ auto	testHTTPparsing(void) -> void {
 }
 
 auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {
-#ifdef FUN_ALLOWED
-	std::cout << "LETS FUCKING GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO!!!!\n";
-#else
-	std::cout << "Hello, World!\n";
-#endif // fun_allowed
+	if (g_funAllowed)
+		std::cout << "LETS FUCKING GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO!!!!\n";
+	else
+		std::cout << "Hello, World!\n";
 	testHTTPparsing();
 	return (0);
 }
