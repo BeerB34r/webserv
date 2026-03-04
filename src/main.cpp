@@ -25,12 +25,20 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
+#include <chrono>
 #include <iostream>
 #include <iomanip>
 #include <fstream>
 #include <Parser.hpp>
 #include <HTTPMessage.hpp>
 #include <HTTPparsing.hpp>
+
+std::chrono::duration<double,std::micro>	stopwatch(std::function<void()> fn) {
+	std::chrono::time_point start = std::chrono::high_resolution_clock::now();
+	fn();
+	std::chrono::time_point end = std::chrono::high_resolution_clock::now();
+	return (end - start);
+}
 
 template <typename T>
 concept printable = requires (T a, std::ostream os) {
@@ -107,7 +115,6 @@ auto	readhttp(std::string file) -> void {
 	std::ostringstream	oss;
 	oss << filestream.rdbuf();
 	std::string	input = oss.str();
-	std::cout << "parsing \"" << file << "\"\n";
 	Maybe<HTTPMessage>	message = readHTTPmessage(input);
 	if (!message) std::cout << "Nothing\n";
 	else {
@@ -169,9 +176,14 @@ auto	testParserFeatures(void) -> void {
 	testParser(scrubWs, "bar");
 }
 
+auto inline	testHTTPparsingfile(const std::string& fname) {
+	std::cout << "time to parse: " << fname << "\n";
+	std::cout << "\n" << stopwatch([fname](){ readhttp(fname); });
+}
+
 auto	testHTTPparsing(void) -> void {
-	readhttp("hs/response.http");
-	readhttp("hs/request.http");
+	testHTTPparsingfile("hs/response.http");
+	testHTTPparsingfile("hs/request.http");
 }
 
 auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {
