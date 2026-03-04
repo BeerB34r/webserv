@@ -31,8 +31,9 @@ endif
 
 ifneq ($(origin DEBUG),undefined)
 	CXXFLAGS	+=	-ggdb
+	MAKEFLAGS	+=	-B
 else
-	CXXFLAGS	+= -O3
+	CXXFLAGS	+=	-O3
 endif
 
 -include $(DEP)
