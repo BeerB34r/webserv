@@ -21,9 +21,7 @@
 /*   ⠀⠀⠀⠀⣼⣳⣫⣾⣵⣗⡵⡱⡡⢣⢑⢕⢜⢕⡝⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                                           */
 /*   ⠀⠀⠀⣴⣿⣾⣿⣿⣿⡿⡽⡑⢌⠪⡢⡣⣣⡟⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                                           */
 /*   ⠀⠀⠀⡟⡾⣿⢿⢿⢵⣽⣾⣼⣘⢸⢸⣞⡟⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                                           */
-/*   ⠀⠀⠀⠀⠁⠇⠡⠩⡫⢿⣝⡻⡮⣒⢽⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                                           */
-/*   ——————————————————————————————                                           */
-/* ************************************************************************** */
+/*   ⠀⠀⠀⠀⠁⠇⠡⠩⡫⢿⣝⡻⡮⣒⢽⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀                                           */ /*   ——————————————————————————————                                           */ /* ************************************************************************** */
 
 #include <chrono>
 #include <iostream>
@@ -185,16 +183,61 @@ auto inline	testHTTPparsingfile(const std::string& fname) {
   readhttp(fname);
 }
 
+auto	testHTTPparsing(void) -> void {
+	testHTTPparsingfile("example/response.http");
+	testHTTPparsingfile("example/request.http");
+}
+
+#include <Config.hpp>
+
+auto	printBlock(const int depth, const Config& block) -> void {
+	const std::string	prefix(depth, '\t');
+	std::cout << prefix << "values [\n";
+	for (const std::pair<const std::string,std::string>& p : block.values)
+		std::cout << prefix << "\t" << p.first << " = " << p.second << "\n";
+	std::cout << prefix << "]\n" << prefix << "blocks [\n";
+	for (const Config& b : block.blocks) {
+		if (b.type != Config::UNKNOWN)
+			std::cout << prefix << "type: " << fromType(b.type) << "\n";
+		if (!b.ident.empty())
+			std::cout << prefix << "ident: " << b.ident << "\n";
+		printBlock(depth + 1, b);
+	}
+	std::cout << prefix << "]\n";
+}
+auto	readConfig(const std::string& file, bool print = true) {
+	std::ifstream	filestream(file);
+	std::ostringstream	oss;
+	oss << filestream.rdbuf();
+	std::string	input = oss.str();
+	std::optional<std::pair<std::string,Config>>	configRes = ConfigParse::config(input);
+	if (!print) return ;
+	if (!configRes) {
+		std::cout << "Nothing\n";
+	} else {
+		Config	config = configRes->second;
+		std::cout << "Just (\n";
+		printBlock(1, config);
+		std::cout << ")\n";
+	}
+}
+
+auto inline	testConfigParsingFile(const std::string& fname) {
+	std::chrono::duration<double, std::micro> time = stopwatch([fname]() { readConfig(fname, false); });
+	std::cout << "time to parse " << fname << ": " << time << "\n";
+	std::cout << "output:\n";
+	readConfig(fname);
+}
+
+auto	testConfigParsing(void) -> void {
+	testConfigParsingFile("example/example.conf");
+}
+
 #ifdef FUN_ALLOWED
 bool	g_funAllowed = true;
 #else
 bool	g_funAllowed = false;
 #endif // FUN_ALLOWED
-
-auto	testHTTPparsing(void) -> void {
-	testHTTPparsingfile("example/response.http");
-	testHTTPparsingfile("example/request.http");
-}
 
 auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {
 	if (g_funAllowed)
@@ -202,5 +245,6 @@ auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {
 	else
 		std::cout << "Hello, World!\n";
 	testHTTPparsing();
+	testConfigParsing();
 	return (0);
 }

@@ -85,30 +85,9 @@ auto	Parse::many(const Parser<char> p) noexcept -> Parser<std::string> {
 	});
 }
 
-auto	Parse::many(const Parser<std::string> p) noexcept -> Parser<std::vector<std::string>> {
-	return Parser<std::vector<std::string>>([p](const std::string& s)	constexpr noexcept -> Maybe<Pair<std::string,std::vector<std::string>>> {
-			std::string	remainder(s);
-			std::vector<std::string>	result;
-			for (Maybe<Pair<std::string,std::string>> current = p(s); current.has_value(); current = p(remainder)) {
-				result.push_back((current.value().second));
-				remainder = current.value().first;
-			}
-			return std::make_pair(remainder, result);
-	});
-}
-
 auto	Parse::some(const Parser<char> p) noexcept -> Parser<std::string> {
 	return Parser<std::string>([p](const std::string& s)	noexcept -> Maybe<Pair<std::string,std::string>> {
 			Maybe<Pair<std::string,std::string>>	result = many(p)(s);
-			if (!result.has_value()) return std::nullopt;
-			if (!result.value().second.size()) return std::nullopt;
-			return result;
-	});
-}
-
-auto	Parse::some(const Parser<std::string> p) noexcept -> Parser<std::vector<std::string>> {
-	return Parser<std::vector<std::string>>([p](const std::string& s)	noexcept -> Maybe<Pair<std::string,std::vector<std::string>>> {
-			Maybe<Pair<std::string,std::vector<std::string>>>	result = many(p)(s);
 			if (!result.has_value()) return std::nullopt;
 			if (!result.value().second.size()) return std::nullopt;
 			return result;

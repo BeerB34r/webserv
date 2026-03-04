@@ -32,6 +32,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 
 template <typename T>
 using Maybe = std::optional<T>;
@@ -44,7 +45,7 @@ class Parser {
 public:
 	using resultType = Pair<std::string,T>;
 
-	constexpr Parser() = delete;
+	constexpr Parser() noexcept = delete;
 	constexpr Parser(std::function<Maybe<resultType>(const std::string&)>) noexcept;
 	constexpr Parser(const Parser&) noexcept;
 	constexpr Parser&	operator =(const Parser&) noexcept = default;
@@ -96,9 +97,11 @@ namespace Parse {
 	auto	parseString(const std::string&) noexcept -> Parser<std::string>;
 
 	auto	many(const Parser<char>) noexcept -> Parser<std::string>;
-	auto	many(const Parser<std::string>) noexcept -> Parser<std::vector<std::string>>;
+	template <typename T>
+	auto	many(const Parser<T>) noexcept -> Parser<std::vector<T>>;
 	auto	some(const Parser<char>) noexcept -> Parser<std::string>;
-	auto	some(const Parser<std::string>) noexcept -> Parser<std::vector<std::string>>;
+	template <typename T>
+	auto	some(const Parser<T>) noexcept -> Parser<std::vector<T>>;
 }
 
 

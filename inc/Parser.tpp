@@ -122,4 +122,27 @@ constexpr auto	Parse::parseOpt(T x, Parser<T> p) noexcept -> Parser<T> {
 			return p(s).value_or(std::make_pair(s, x));
 	});
 }
+
+template <typename T>
+auto	Parse::many(const Parser<T> p) noexcept -> Parser<std::vector<T>> {
+	return Parser<std::vector<T>>([p](const std::string& s)	constexpr noexcept -> Maybe<Pair<std::string,std::vector<T>>> {
+			std::string	remainder(s);
+			std::vector<T>	result;
+			for (Maybe<Pair<std::string,T>> current = p(s); current.has_value(); current = p(remainder)) {
+				result.push_back((current.value().second));
+				remainder = current.value().first;
+			}
+			return std::make_pair(remainder, result);
+	});
+}
+
+template <typename T>
+auto	Parse::some(const Parser<T> p) noexcept -> Parser<std::vector<T>> {
+	return Parser<std::vector<T>>([p](const std::string& s)	noexcept -> Maybe<Pair<std::string,std::vector<T>>> {
+			Maybe<Pair<std::string,std::vector<T>>>	result = many(p)(s);
+			if (!result.has_value()) return std::nullopt;
+			if (!result.value().second.size()) return std::nullopt;
+			return result;
+	});
+}
 #endif // PARSER_TPP
