@@ -48,8 +48,8 @@ auto	Parse::parseChar(char c) noexcept -> Parser<char> {
 auto	Parse::parseAnyOf(const std::string& set) noexcept -> Parser<char> {
 	return Parser<char>([set](const std::string& s)	noexcept -> Maybe<Pair<std::string,char>> {
 			Maybe<Pair<std::string,char>>	inner = parseAny()(s);
-			if (!inner.has_value()) return std::nullopt;
-			if (!set.contains(inner.value().second)) return std::nullopt;
+			if (!inner) return std::nullopt;
+			if (!set.contains(inner->second)) return std::nullopt;
 			return inner;
 	});
 }
@@ -57,8 +57,8 @@ auto	Parse::parseAnyOf(const std::string& set) noexcept -> Parser<char> {
 auto	Parse::parsePredicate(std::function<bool(char)> f) noexcept -> Parser<char> {
 	return Parser<char>([f](const std::string& s)	noexcept -> Maybe<Pair<std::string,char>> {
 			Maybe<Pair<std::string,char>>	inner = parseAny()(s);
-			if (!inner.has_value()) return std::nullopt;
-			if (!f(inner.value().second)) return std::nullopt;
+			if (!inner) return std::nullopt;
+			if (!f(inner->second)) return std::nullopt;
 			return inner;
 	});
 }
@@ -78,8 +78,8 @@ auto	Parse::many(const Parser<char> p) noexcept -> Parser<std::string> {
 			std::string	remainder(s);
 			std::string	result;
 			for (Maybe<Pair<std::string,char>> current = p(s); current.has_value(); current = p(remainder)) {
-				result += (current.value().second);
-				remainder = current.value().first;
+				result += (current->second);
+				remainder = current->first;
 			}
 			return std::make_pair(remainder, result);
 	});
@@ -88,8 +88,8 @@ auto	Parse::many(const Parser<char> p) noexcept -> Parser<std::string> {
 auto	Parse::some(const Parser<char> p) noexcept -> Parser<std::string> {
 	return Parser<std::string>([p](const std::string& s)	noexcept -> Maybe<Pair<std::string,std::string>> {
 			Maybe<Pair<std::string,std::string>>	result = many(p)(s);
-			if (!result.has_value()) return std::nullopt;
-			if (!result.value().second.size()) return std::nullopt;
+			if (!result) return std::nullopt;
+			if (result->second.empty()) return std::nullopt;
 			return result;
 	});
 }
