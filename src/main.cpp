@@ -192,8 +192,8 @@ bool	g_funAllowed = false;
 #endif // FUN_ALLOWED
 
 auto	testHTTPparsing(void) -> void {
-	testHTTPparsingfile("hs/response.http");
-	testHTTPparsingfile("hs/request.http");
+	testHTTPparsingfile("example/response.http");
+	testHTTPparsingfile("example/request.http");
 }
 
 auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {

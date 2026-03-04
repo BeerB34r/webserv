@@ -5,4 +5,5 @@
 !*.hpp
 !*.tpp
 !*.hs
+!example/*
 !makefile
