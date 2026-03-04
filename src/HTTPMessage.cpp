@@ -30,6 +30,7 @@
 #include <HTTPMessage.hpp>
 #include <HTTPparsing.hpp>
 #include <Parser.hpp>
+#include <variant>
 
 using String = std::string;
 
@@ -71,20 +72,18 @@ static inline auto	populateResponseData(const String& startline) -> HTTPMessage:
 
 HTTPMessage::HTTPMessage(const String& startline, const std::vector<String>& fieldlines, const String& body) noexcept : startline(startline), fieldlines(fieldlines), body(body) {
 	if (HTTPparsing::requestLine(startline)) {
-		requestStatus = true;
 		data = populateRequestData(startline);
 		fields = populateFields(fieldlines);
 	} else {
-		requestStatus = false;
 		data = populateResponseData(startline);
 		fields = populateFields(fieldlines);
 	}
 }
 
-auto	HTTPMessage::getStartline(void) const noexcept -> const String& { return this->startline; }
-auto	HTTPMessage::getFieldlines(void) const noexcept -> const std::vector<String>& { return this->fieldlines; }
-auto	HTTPMessage::getBody(void) const noexcept -> const String& { return this->body; }
-auto	HTTPMessage::isRequest(void) const noexcept -> bool { return this->requestStatus; }
+auto	HTTPMessage::getStartline(void) const noexcept -> const String& { return startline; }
+auto	HTTPMessage::getFieldlines(void) const noexcept -> const std::vector<String>& { return fieldlines; }
+auto	HTTPMessage::getBody(void) const noexcept -> const String& { return body; }
+auto	HTTPMessage::isRequest(void) const noexcept -> bool { return std::holds_alternative<RequestData>(data); }
 
 auto	readHTTPmessage(const String& s) noexcept -> Maybe<HTTPMessage> {
 	Maybe<Parser<String>::resultType>	startlineParseRes = (HTTPparsing::startLine < HTTPparsing::crlf)(s);
@@ -130,7 +129,7 @@ auto	readHTTPresponse(const String& s) noexcept -> Maybe<HTTPMessage> {
 
 auto	HTTPMessage::prettyPrint(void) const noexcept -> const String {
 	std::stringstream	ss;
-	if (requestStatus) {
+	if (holds_alternative<RequestData>(data)) {
 		const RequestData	request = std::get<RequestData>(data);
 		ss << toString(request.method) << " request\n";
 		ss << "request target: \"" << request.requestTarget << "\"\n";

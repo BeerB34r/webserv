@@ -86,7 +86,6 @@ public:
 	auto	prettyPrint(void) const noexcept -> const std::string;
 	static const std::set<HTTPMethod>	supportedRequestMethods;
 private:
-	bool									requestStatus;
 	std::variant<RequestData,ResponseData>	data;
 	std::map<std::string,std::string>		fields;
 	// plumbing

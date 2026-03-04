@@ -110,12 +110,14 @@ auto	testipv6(void) -> void {
 	testParser(HTTPparsing::ipv6address, "FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF::end of string");
 }
 
-auto	readhttp(std::string file) -> void {
+auto	readhttp(std::string file, bool print = true) -> void {
 	std::ifstream	filestream(file);
 	std::ostringstream	oss;
 	oss << filestream.rdbuf();
 	std::string	input = oss.str();
 	Maybe<HTTPMessage>	message = readHTTPmessage(input);
+	if (!print)
+		return ;
 	if (!message) std::cout << "Nothing\n";
 	else {
 		std::cout << "Just (\n" << message->prettyPrint() << ")\n";
@@ -177,11 +179,17 @@ auto	testParserFeatures(void) -> void {
 }
 
 auto inline	testHTTPparsingfile(const std::string& fname) {
-	std::cout << "time to parse: " << fname << "\n";
-	std::cout << "\n" << stopwatch([fname](){ readhttp(fname); }) <<  "\n";
+  std::chrono::duration<double, std::micro> time = stopwatch([fname]() { readhttp(fname, false); });
+  std::cout << "time to parse " << fname << ": " << time << "\n";
+  std::cout << "output:\n";
+  readhttp(fname);
 }
 
+#ifdef FUN_ALLOWED
+bool	g_funAllowed = true;
+#else
 bool	g_funAllowed = false;
+#endif // FUN_ALLOWED
 
 auto	testHTTPparsing(void) -> void {
 	testHTTPparsingfile("hs/response.http");
@@ -189,8 +197,6 @@ auto	testHTTPparsing(void) -> void {
 }
 
 auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {
-
-	g_funAllowed = (std::string(0[av]) == "./ginxnay") || (std::string(0[av]) == "ginxnay");
 	if (g_funAllowed)
 		std::cout << "LETS FUCKING GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO!!!!\n";
 	else
