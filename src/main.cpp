@@ -181,11 +181,7 @@ auto inline	testHTTPparsingfile(const std::string& fname) {
 	std::cout << "\n" << stopwatch([fname](){ readhttp(fname); }) <<  "\n";
 }
 
-#ifdef FUN_ALLOWED
-bool	g_funAllowed = true;
-#else
 bool	g_funAllowed = false;
-#endif // FUN_ALLOWED
 
 auto	testHTTPparsing(void) -> void {
 	testHTTPparsingfile("hs/response.http");
@@ -193,6 +189,8 @@ auto	testHTTPparsing(void) -> void {
 }
 
 auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {
+
+	g_funAllowed = (std::string(0[av]) == "./ginxnay") || (std::string(0[av]) == "ginxnay");
 	if (g_funAllowed)
 		std::cout << "LETS FUCKING GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO!!!!\n";
 	else

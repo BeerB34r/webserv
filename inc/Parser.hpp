@@ -44,18 +44,18 @@ class Parser {
 public:
 	using resultType = Pair<std::string,T>;
 
-	Parser() = delete;
-	Parser(std::function<Maybe<resultType>(const std::string&)>) noexcept;
-	Parser(const Parser&) noexcept;
-	Parser&	operator =(const Parser&) noexcept = default;
-	virtual	~Parser() noexcept = default;
+	constexpr Parser() = delete;
+	constexpr Parser(std::function<Maybe<resultType>(const std::string&)>) noexcept;
+	constexpr Parser(const Parser&) noexcept;
+	constexpr Parser&	operator =(const Parser&) noexcept = default;
+	constexpr virtual	~Parser() noexcept = default;
 
-	auto	runParser(const std::string&) const noexcept -> Maybe<resultType>;
-	auto	operator()(const std::string&) const noexcept -> Maybe<resultType>;
+	constexpr auto	runParser(const std::string&) const noexcept -> Maybe<resultType>;
+	constexpr auto	operator()(const std::string&) const noexcept -> Maybe<resultType>;
 
 	//	Parser is now a functor
 	template <typename I>
-	auto	fmap(std::function<I(T)>) noexcept -> Parser<I>;
+	constexpr auto	fmap(std::function<I(T)>) noexcept -> Parser<I>;
 
 private:
 	const std::function<Maybe<resultType>(const std::string&)>	f;
@@ -63,31 +63,31 @@ private:
 
 // synonym for fmap
 template <typename T, typename I>
-auto	operator>>(std::function<I(T)>, Parser<T>) noexcept -> Parser<I>;
+constexpr auto	operator>>(std::function<I(T)>, Parser<T>) noexcept -> Parser<I>;
 
 // sequential application (half of proving Parser is an Applicative)
 template <typename T, typename I>
-auto	operator*(Parser<std::function<I(T)>>, Parser<T>) noexcept -> Parser<I>;
+constexpr auto	operator*(Parser<std::function<I(T)>>, Parser<T>) noexcept -> Parser<I>;
 
 // alternative application (half of proving Parser is an Alternative)
 template <typename T>
-auto	operator|(Parser<T>, Parser<T>) noexcept -> Parser<T>;
+constexpr auto	operator|(Parser<T>, Parser<T>) noexcept -> Parser<T>;
 
 // evaluate both sequentially, return only one
 template <typename T, typename I>
-auto	operator>(Parser<T>, Parser<I>) noexcept -> Parser<I>;
+constexpr auto	operator>(Parser<T>, Parser<I>) noexcept -> Parser<I>;
 template <typename T, typename I>
-auto	operator<(Parser<T>, Parser<I>) noexcept -> Parser<T>;
+constexpr auto	operator<(Parser<T>, Parser<I>) noexcept -> Parser<T>;
 
 namespace Parse {
 	template<typename T>
-	auto	pure(T x) noexcept -> Parser<T>;
+	constexpr auto	pure(T x) noexcept -> Parser<T>;
 
 	template<typename T>
-	auto	empty() noexcept -> Parser<T>;
+	constexpr auto	empty() noexcept -> Parser<T>;
 
 	template <typename T>
-	auto	parseOpt(T, Parser<T>) noexcept -> Parser<T>;
+	constexpr auto	parseOpt(T, Parser<T>) noexcept -> Parser<T>;
 	auto	parseAny() noexcept -> Parser<char>;
 
 	auto	parseChar(char) noexcept -> Parser<char>;
