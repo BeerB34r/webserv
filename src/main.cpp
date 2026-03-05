@@ -30,6 +30,8 @@
 #include <Parser.hpp>
 #include <HTTPMessage.hpp>
 #include <HTTPparsing.hpp>
+#include <Config.hpp>
+#include <cmdline.hpp>
 
 std::chrono::duration<double,std::micro>	stopwatch(std::function<void()> fn) {
 	std::chrono::time_point start = std::chrono::high_resolution_clock::now();
@@ -188,8 +190,6 @@ auto	testHTTPparsing(void) -> void {
 	testHTTPparsingfile("example/request.http");
 }
 
-#include <Config.hpp>
-
 auto	printBlock(const int depth, const Config& block) -> void {
 	const std::string	prefix(depth, '\t');
 	if (!block.values.empty()) {
@@ -244,6 +244,28 @@ auto	testConfigParsing(void) -> void {
 	testConfigParsingFile("example/example.conf");
 }
 
+#define cmdlinetest(x) do { std::cout << x << #x RESET "\n"; } while (0)
+auto	testCmdline(void) -> void {
+	std::cout << RESET << "Testing commandline peacocking\n";
+	cmdlinetest(BOLD);
+	cmdlinetest(DIM);
+	cmdlinetest(ITALIC);
+	cmdlinetest(UNDERLINE);
+	cmdlinetest(BLINKING);
+	cmdlinetest(INVERSE);
+	cmdlinetest(HIDDEN);
+	cmdlinetest(STRIKETHROUGH);
+	cmdlinetest(BLACK);
+	cmdlinetest(RED);
+	cmdlinetest(GREEN);
+	cmdlinetest(YELLOW);
+	cmdlinetest(BLUE);
+	cmdlinetest(MAGENTA);
+	cmdlinetest(CYAN);
+	cmdlinetest(WHITE);
+	cmdlinetest(DEFAULT);
+}
+
 #ifdef FUN_ALLOWED
 bool	g_funAllowed = true;
 #else
@@ -257,5 +279,6 @@ auto	main([[maybe_unused]] int ac, [[maybe_unused]] char **av) -> int {
 		std::cout << "Hello, World!\n";
 	testHTTPparsing();
 	testConfigParsing();
+	testCmdline();
 	return (0);
 }
