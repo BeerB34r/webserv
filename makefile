@@ -1,4 +1,4 @@
-SRC				:=	main.cpp parse.cpp HTTPparsing.cpp HTTPMessage.cpp ConfigParse.cpp Config.cpp
+SRC				:=	main.cpp parse.cpp HTTPparsing.cpp HTTPMessage.cpp ConfigParse.cpp Config.cpp tests.cpp
 SRCDIR			:=	src/
 
 BIN				=	$(addprefix $(BINDIR),$(SRC:.cpp=.o))
