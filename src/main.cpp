@@ -192,18 +192,29 @@ auto	testHTTPparsing(void) -> void {
 
 auto	printBlock(const int depth, const Config& block) -> void {
 	const std::string	prefix(depth, '\t');
-	std::cout << prefix << "values [\n";
-	for (const std::pair<const std::string,std::string>& p : block.values)
-		std::cout << prefix << "\t" << p.first << " = " << p.second << "\n";
-	std::cout << prefix << "]\n" << prefix << "blocks [\n";
-	for (const Config& b : block.blocks) {
-		if (b.type != Config::UNKNOWN)
-			std::cout << prefix << "type: " << fromType(b.type) << "\n";
-		if (!b.ident.empty())
-			std::cout << prefix << "ident: " << b.ident << "\n";
-		printBlock(depth + 1, b);
+	if (!block.values.empty()) {
+		std::cout << prefix << "values [\n";
+		for (const std::pair<const std::string,std::string>& p : block.values) {
+			if (p.second.empty())
+				std::cout << prefix << "\t" << p.first << "\n";
+			else 
+				std::cout << prefix << "\t" << p.first << " = " << p.second << "\n";
+		}
+		std::cout << prefix << "]\n";
 	}
-	std::cout << prefix << "]\n";
+	if (!block.blocks.empty()) {
+		std::cout << prefix << "blocks [\n";
+		for (const Config& b : block.blocks) {
+			std::cout << prefix << "{\n";
+			if (b.type != Config::UNKNOWN)
+				std::cout << prefix << "\ttype: " << fromType(b.type) << "\n";
+			if (!b.ident.empty())
+				std::cout << prefix << "\tident: " << b.ident << "\n";
+			printBlock(depth + 1, b);
+			std::cout << prefix << "}\n";
+		}
+		std::cout << prefix << "]\n";
+	}
 }
 auto	readConfig(const std::string& file, bool print = true) {
 	std::ifstream	filestream(file);

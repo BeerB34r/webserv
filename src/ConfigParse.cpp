@@ -99,7 +99,7 @@ namespace ConfigParse {
 			if (!closingBrace) return std::nullopt;
 			Config	out({.type = typeRes->second, .ident = identRes->second, .values = {}, .blocks = {}});
 			for (const std::variant<Pair<String,String>,Config,String>&	value : values->second) {
-				if (std::holds_alternative<Config>(value)) {
+				if (std::holds_alternative<Config>(value) && !std::get<Config>(value).empty()) {
 					out.blocks.push_back(std::get<Config>(value));
 				} else if (std::holds_alternative<Pair<String,String>>(value)) {
 					String	key;

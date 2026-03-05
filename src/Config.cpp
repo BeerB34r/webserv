@@ -27,6 +27,10 @@
 
 #include <Config.hpp>
 
+auto	Config::empty(void) const noexcept -> bool {
+	return (blocks.empty() && values.empty());
+}
+
 auto	fromType(Config::Type t) -> const std::string {
 	switch (t) {
 		case (Config::HTTP): return "Http";

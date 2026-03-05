@@ -43,6 +43,7 @@ struct	Config {
 	std::string	ident;
 	std::map<std::string,std::string>	values;
 	std::vector<Config>	blocks;
+	auto	empty(void) const noexcept -> bool;
 };
 
 auto	fromType(Config::Type) -> const std::string;
