@@ -1,4 +1,6 @@
-SRC				:=	main.cpp parse.cpp HTTPparsing.cpp HTTPMessage.cpp ConfigParse.cpp Config.cpp tests.cpp
+# changing what source files the project requires should not force recompilation
+# in and of itself
+include srcfiles.mk
 SRCDIR			:=	src/
 
 BIN				=	$(addprefix $(BINDIR),$(SRC:.cpp=.o))

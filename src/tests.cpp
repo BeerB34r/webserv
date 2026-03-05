@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/03/05 18:47:17 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/03/05 18:50:12 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/03/05 18:54:28 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -268,6 +268,7 @@ auto	testCmdline(void) -> void {
 	cmdlinetest(DEFAULT);
 }
 
+// exposed function for testsuite
 auto	runTests(void) -> void {
 	testHTTPparsing();
 	testConfigParsing();
