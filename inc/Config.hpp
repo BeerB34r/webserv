@@ -44,6 +44,7 @@ struct	Config {
 	std::map<std::string,std::string>	values;
 	std::vector<Config>	blocks;
 	auto	empty(void) const noexcept -> bool;
+	auto	propogateToBlocks(void) noexcept -> bool;
 };
 
 auto	fromType(Config::Type) -> const std::string;

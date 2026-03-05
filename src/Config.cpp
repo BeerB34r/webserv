@@ -31,6 +31,20 @@ auto	Config::empty(void) const noexcept -> bool {
 	return (blocks.empty() && values.empty());
 }
 
+auto	Config::propogateToBlocks(void) noexcept -> bool {
+	for (Config& c : blocks) {
+		for (const std::pair<const std::string,std::string>&	p : values) {
+			std::string	key;
+			std::string	val;
+			std::tie(key,val) = p;
+			if (!c.values.contains(key)) c.values[key] = val;
+			else c.values[key] += "," + val;
+		}
+		if (c.propogateToBlocks()) return (true);
+	}
+	return (false);
+}
+
 auto	fromType(Config::Type t) -> const std::string {
 	switch (t) {
 		case (Config::HTTP): return "Http";

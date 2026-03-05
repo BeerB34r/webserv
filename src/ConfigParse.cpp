@@ -121,6 +121,7 @@ namespace ConfigParse {
 	extern const Parser<Config>			config([](const String& s) noexcept -> Maybe<Pair<String,Config>> {
 			Maybe<Pair<String,Config>>	asBlock = block("{" + s + "};");
 			if (!asBlock) return std::nullopt;
+			if (asBlock->second.propogateToBlocks()) return std::nullopt;
 			asBlock->second.type = Config::TOP_LEVEL;
 			asBlock->second.ident = "TopLevelConfiguration";
 			return asBlock;
