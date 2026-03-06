@@ -25,6 +25,8 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
+#include <asm-generic/socket.h>
+#include <csignal>
 #include <functional>
 #include <server.hpp>
 
@@ -33,6 +35,7 @@
 #include <cstring>
 #include <sys/socket.h>
 #include <netinet/ip.h>
+#include <thread>
 #include <unistd.h>
 
 #include <HTTPMessage.hpp>
@@ -53,21 +56,41 @@ auto	createSocket(short port) -> int {
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	int	yes = 1; // solaris???
-	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+	int	reuse = 1;
+	// allow reuse of address and port
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+		perror(strerror(errno));
+		std::cerr << "failed while setting socket option \"reuse address\"\n";
+		goto error;
+	}
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) {
+		perror(strerror(errno));
+		std::cerr << "failed while setting socket option \"reuse port\"\n";
+		goto error;
+	}
+	// do not let the port remain open after the program closes
+	linger	lin;
+	lin.l_linger = 0;
+	lin.l_onoff = 0;
+	if (setsockopt(sock, SOL_SOCKET, SO_LINGER, reinterpret_cast<const char *>(&lin), sizeof(lin))) {
+		perror(strerror(errno));
+		std::cerr << "failed while setting socket option \"linger\"\n";
+		goto error;
+	}
 
 	if (bind(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr))) {
 		perror(strerror(errno));
 		std::cerr << "failed to bind socket\n";
-		close(sock);
-		return (-1);
+		goto error;
 	}
 	if (listen(sock, LISTEN_BACKLOG) == -1) {
 		std::cerr << "failed to listen on socket\n";
-		close(sock);
-		return (-1);
+		goto error;
 	}
 	return (sock);
+error:
+	close(sock);
+	return (-1);
 }
 
 // returns negative on error
@@ -80,6 +103,8 @@ auto	getIncomingConnection(int socket) -> int {
 }
 
 typedef std::function<HTTPMessage(Maybe<HTTPMessage>)> RequestHandler;
+
+bool	stop;
 
 // instance of the RequestHandler function type
 auto	dummyRequestHandler(Maybe<HTTPMessage> request) -> HTTPMessage {
@@ -100,12 +125,20 @@ auto	handleIncomingTraffic(int fd, RequestHandler handler) -> int {
 		}
 		in.append(buf, bytes);
 		message = readHTTPrequest(in);
+		if (in == "stop") stop = true;
 		if (!message && bytes != BUFFER_SIZE) std::cerr << "incoming traffic not recognised as http request\n";
 	} while (bytes == BUFFER_SIZE);
 	std::stringstream	ss;
 	ss << handler(message);
-	write(fd, ss.str().c_str(), ss.str().size());
+	if (write(fd, ss.str().c_str(), ss.str().size())) {};
+	close(fd);
 	return (0);
+}
+
+auto	threadFunc(const int fd) -> int {
+	int	rv = handleIncomingTraffic(fd, dummyRequestHandler);
+	close(fd);
+	return (rv);
 }
 
 auto	mvpServer(void) -> int {
@@ -113,16 +146,24 @@ auto	mvpServer(void) -> int {
 	const fd	sock = createSocket(PORT);
 	if (sock < 0) return (1);
 
-	while (true) {
+	std::vector<std::thread>	threads;
+	while (!stop) {
 		fd	peerFD = getIncomingConnection(sock);
 		if (peerFD < 0) goto error;
-		int	rv = handleIncomingTraffic(peerFD, dummyRequestHandler);
-		close(peerFD);
-		if (rv) goto error;
+		threads.push_back(std::thread(handleIncomingTraffic, peerFD, dummyRequestHandler));
 	}
 	close(sock);
+	for (std::thread& t : threads) {
+		std::cout << "joining thread " << t.get_id() << "\n";
+		t.join();
+	}
 	return (0);
 error: // MY WORLDS ON FIRE, HOW BOUT YOURS
 	close(sock);
+	for (std::thread& t : threads) {
+		if (!t.joinable()) continue ; // dude a filter view would be so nice here
+		std::cout << "joining thread " << t.get_id() << "\n";
+		t.join();
+	}
 	return (1);
 }
