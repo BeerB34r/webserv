@@ -28,6 +28,7 @@
 #include <asm-generic/socket.h>
 #include <csignal>
 #include <functional>
+#include <future>
 #include <server.hpp>
 
 #include <iostream>
@@ -141,29 +142,41 @@ auto	threadFunc(const int fd) -> int {
 	return (rv);
 }
 
+
 auto	mvpServer(void) -> int {
+	using namespace std::literals;
 	using fd = int;
 	const fd	sock = createSocket(PORT);
 	if (sock < 0) return (1);
 
-	std::vector<std::thread>	threads;
+	std::vector<std::future<int>>	threads;
 	while (!stop) {
+		for (unsigned int i = 0; i < threads.size(); i++) {
+			if (std::future_status::ready == threads[i].wait_for(0ms)) {
+				int rv = threads[i].get();
+				threads.erase(threads.begin() + i);
+				if (rv) goto error;
+			}
+		}
 		fd	peerFD = getIncomingConnection(sock);
 		if (peerFD < 0) goto error;
-		threads.push_back(std::thread(handleIncomingTraffic, peerFD, dummyRequestHandler));
+		threads.push_back(std::async(std::launch::async, threadFunc, peerFD));
+		if (stop)
+			break ;
 	}
 	close(sock);
-	for (std::thread& t : threads) {
-		std::cout << "joining thread " << t.get_id() << "\n";
-		t.join();
+	std::cout << "threads at exit: " << threads.size() << "\n";
+	for (std::future<int>& f : threads) {
+		f.wait();
+		(void)f.get();
 	}
 	return (0);
 error: // MY WORLDS ON FIRE, HOW BOUT YOURS
 	close(sock);
-	for (std::thread& t : threads) {
-		if (!t.joinable()) continue ; // dude a filter view would be so nice here
-		std::cout << "joining thread " << t.get_id() << "\n";
-		t.join();
+	std::cout << "threads at exit: " << threads.size() << "\n";
+	for (std::future<int>& f : threads) {
+		f.wait();
+		(void)f.get();
 	}
 	return (1);
 }
