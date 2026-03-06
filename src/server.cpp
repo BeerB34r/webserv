@@ -146,8 +146,8 @@ auto	threadFunc(const int fd) -> int {
 auto	mvpServer(void) -> int {
 	using namespace std::literals;
 	using fd = int;
-	const fd	sock = createSocket(PORT);
-	if (sock < 0) return (1);
+	const fd	socket = createSocket(PORT);
+	if (socket < 0) return (1);
 
 	std::vector<std::future<int>>	threads;
 	while (!stop) {
@@ -158,11 +158,11 @@ auto	mvpServer(void) -> int {
 				if (rv) goto error;
 			}
 		}
-		fd	peerFD = getIncomingConnection(sock);
+		fd	peerFD = getIncomingConnection(socket);
 		if (peerFD < 0) goto error;
 		threads.push_back(std::async(std::launch::async, threadFunc, peerFD));
 	}
-	close(sock);
+	close(socket);
 	std::cout << "threads at exit: " << threads.size() << "\n";
 	for (std::future<int>& f : threads) {
 		f.wait();
@@ -170,7 +170,7 @@ auto	mvpServer(void) -> int {
 	}
 	return (0);
 error: // MY WORLDS ON FIRE, HOW BOUT YOURS
-	close(sock);
+	close(socket);
 	std::cout << "threads at exit: " << threads.size() << "\n";
 	for (std::future<int>& f : threads) {
 		f.wait();
