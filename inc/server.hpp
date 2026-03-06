@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                            ::::::::        */
-/*   main.cpp                                                :+:    :+:       */
+/*   server.hpp                                              :+:    :+:       */
 /*                                                          +:+               */
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
-/*   Created: 2026/02/16 19:03:36 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/03/05 20:09:55 by mde-beer            ########   odam.nl   */
+/*   Created: 2026/03/06 16:07:57 by mde-beer            #+#    #+#           */
+/*   Updated: 2026/03/06 16:08:27 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -25,19 +25,9 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
-#include <iostream>
+#ifndef SERVER_HPP
+# define SERVER_HPP
 
-#include <global.hpp>
-#include <cmdline.hpp>
-#include <server.hpp>
+auto	mvpServer(void) -> int;
 
-auto	main(int ac, char **av) -> int {
-	if (int argres = cmdlineArgs(ac, av)) {
-		return (argres - 1);
-	}
-	if (global::fun_allowed)
-		std::cout << "LETS FUCKING GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO!!!!\n";
-	else
-		std::cout << "Hello, World!\n";
-	return (mvpServer());
-}
+#endif // SERVER_HPP
