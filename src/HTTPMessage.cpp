@@ -139,12 +139,15 @@ auto	HTTPMessage::prettyPrint(void) const noexcept -> const String {
 		ss << "status " << response.statusCode << ", \"" << response.reasonPhrase << "\"\n";
 		ss << "version: " << response.httpVersion << "\n";
 	}
-	ss << "fieldlines: [\n";
-	for (const std::pair<String,String> s : fields) {
-		ss << "\t" << s.first << ": " << s.second << "\n";
+	if (!fields.empty()) {
+		ss << "fieldlines: [\n";
+		for (const std::pair<String,String> s : fields) {
+			ss << "\t" << s.first << ": " << s.second << "\n";
+		}
+		ss << "]\n";
 	}
-	ss << "]\n";
-	ss << "messagebody (" << body.size() << "B):\n\"" << body << "\"\n";
+	if (!body.empty())
+		ss << "messagebody (" << body.size() << "B):\n\"" << body << "\"\n";
 	return ss.str();
 }
 
