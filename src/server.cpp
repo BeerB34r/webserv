@@ -82,7 +82,7 @@ auto	getIncomingConnection(int socket) -> int {
 typedef std::function<HTTPMessage(Maybe<HTTPMessage>)> RequestHandler;
 
 // instance of the RequestHandler function type
-auto	handleRequest(Maybe<HTTPMessage> request) -> HTTPMessage {
+auto	dummyRequestHandler(Maybe<HTTPMessage> request) -> HTTPMessage {
 	if (!request) return HTTPMessage("HTTP/1.1 400 Bad request", {}, "");
 	else return HTTPMessage("HTTP/1.1 404 Not found", {}, "");
 }
@@ -116,7 +116,7 @@ auto	mvpServer(void) -> int {
 	while (true) {
 		fd	peerFD = getIncomingConnection(sock);
 		if (peerFD < 0) goto error;
-		int	rv = handleIncomingTraffic(peerFD, handleRequest);
+		int	rv = handleIncomingTraffic(peerFD, dummyRequestHandler);
 		close(peerFD);
 		if (rv) goto error;
 	}
