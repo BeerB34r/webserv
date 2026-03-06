@@ -161,8 +161,6 @@ auto	mvpServer(void) -> int {
 		fd	peerFD = getIncomingConnection(sock);
 		if (peerFD < 0) goto error;
 		threads.push_back(std::async(std::launch::async, threadFunc, peerFD));
-		if (stop)
-			break ;
 	}
 	close(sock);
 	std::cout << "threads at exit: " << threads.size() << "\n";
