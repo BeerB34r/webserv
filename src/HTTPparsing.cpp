@@ -67,8 +67,8 @@ namespace HTTPparsing {
 	extern const Parser<char>	vchar = parsePredicate([](unsigned char c) -> bool { return (c >= 0x21 && 0x7E >= c) ? true : false; });
 	extern const Parser<char>	obsText = parsePredicate([](unsigned char c) -> bool { return (c >= 0x80 && 0xFF >= c) ? true : false; });
 	extern const Parser<char>	fieldVchar = vchar | obsText;
-	extern const Parser<String>	ows = many(parseAnyOf({' ', '\t'}));
-	extern const Parser<String>	rws = some(parseAnyOf({' ', '\t'}));
+	extern const Parser<String>	ows = many(parseAnyOf({' ', '\t'})); // optional whitespace
+	extern const Parser<String>	rws = some(parseAnyOf({' ', '\t'})); // required whitespace
 	extern const Parser<String>	crlf = parseString("\r\n");
 	extern const Parser<String>	token = some(tchar);
 	extern const Parser<String>	pctEncoded

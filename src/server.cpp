@@ -186,6 +186,7 @@ auto	mvpServer(void) -> int {
 				send(current->data.fd, ss.str().c_str(), ss.str().length(), 0);
 				total++;
 				close(current->data.fd);
+				connection_data.erase(current->data.fd);
 			}
 		}
 	}
