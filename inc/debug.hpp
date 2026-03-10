@@ -26,9 +26,15 @@
 /* ************************************************************************** */
 
 #include <string>
+#include <cmdline.hpp>
+
 namespace debug {
 	auto p(const std::string&) -> void; // use this one
 	auto _print(const std::string&) -> void;
 	auto _log(const std::string&) -> void;
 } // namespace debug
 #define DEBUG(x) debug::p(x)
+#define INFO(x) debug::p(CYAN "[INFO]" RESET " " x)
+#define WARN(x) debug::p(YELLOW "[WARN]" RESET " " x)
+#define ERROR(x) debug::p(RED "[ERROR]" RESET " " x)
+#define FATAL(x) debug::p(RED "[FATAL]" RESET " " x)

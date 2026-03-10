@@ -31,7 +31,6 @@
 #include <map>
 #include <server.hpp>
 
-#include <iostream>
 #include <cstring>
 #include <sstream>
 #include <sys/socket.h>
@@ -41,6 +40,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include <debug.hpp>
 #include <HTTPMessage.hpp>
 
 #define PORT 8080
@@ -51,7 +51,7 @@
 auto	createSocket(short port) -> int {
 	int	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (sock < 0) {
-		std::cerr << "failed to create network socket\n";
+		FATAL("failed to create network socket");
 		return (-1);
 	}
 
@@ -60,16 +60,13 @@ auto	createSocket(short port) -> int {
 	addr.sin_port = htons(port);
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	int	reuse = 1;
-
 	// allow reuse of address and port
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
-		perror(strerror(errno));
-		std::cerr << "failed while setting network socket option \"reuse address\"\n";
+		FATAL("failed while setting network socket option \"reuse address\"\n");
 		goto error;
 	}
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) {
-		perror(strerror(errno));
-		std::cerr << "failed while setting network socket option \"reuse port\"\n";
+		FATAL("failed while setting network socket option \"reuse port\"");
 		goto error;
 	}
 	// do not let the port remain open after the program closes
@@ -77,18 +74,16 @@ auto	createSocket(short port) -> int {
 	lin.l_linger = 0;
 	lin.l_onoff = 0;
 	if (setsockopt(sock, SOL_SOCKET, SO_LINGER, reinterpret_cast<const char *>(&lin), sizeof(lin))) {
-		perror(strerror(errno));
-		std::cerr << "failed while setting network socket option \"linger\"\n";
+		FATAL("failed while setting network socket option \"linger\"");
 		goto error;
 	}
 
 	if (bind(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr))) {
-		perror(strerror(errno));
-		std::cerr << "failed to bind network socket\n";
+		FATAL("failed to bind network socket");
 		goto error;
 	}
 	if (listen(sock, LISTEN_BACKLOG) == -1) {
-		std::cerr << "failed to listen on network socket\n";
+		FATAL("failed to listen on network socket");
 		goto error;
 	}
 	return (sock);
@@ -102,7 +97,7 @@ auto	getIncomingConnection(int socket) -> int {
 	struct sockaddr_in	peer;
 	socklen_t	peerAddrSize = sizeof(peer);
 	int	out = accept(socket, reinterpret_cast<struct sockaddr *>(&peer), &peerAddrSize);
-	if (out < 0) std::cerr << "failed to accept incoming traffic\n";
+	if (out < 0) WARN("failed to accept incoming traffic");
 	return out;
 }
 
@@ -112,6 +107,7 @@ bool	stop;
 
 auto	intHandler([[maybe_unused]] int signum) -> void {
 	stop = true;
+	INFO("SIGINT recieved, exiting gracefully");
 }
 
 const HTTPMessage	notFound("HTTP/1.1 404 Not found", {}, "");
@@ -132,7 +128,7 @@ auto	mvpServer(void) -> int {
 	struct epoll_event	events[MAX_EVENTS];
 	const fd	pollfd = epoll_create1(0);
 	if (pollfd < 0) {
-		std::cerr << "failed to create epoll instance\n";
+		FATAL("failed to create epoll instance");
 		close(listen_sock);
 		return (1);
 	}
@@ -142,7 +138,7 @@ auto	mvpServer(void) -> int {
 	ev.events = EPOLLIN;
 	ev.data.fd = listen_sock;
 	if (epoll_ctl(pollfd, EPOLL_CTL_ADD, listen_sock, &ev) < 0) {
-		std::cerr << "failed to add network socket into epoll instance\n";
+		FATAL("failed to add network socket into epoll instance");
 		close(pollfd);
 		close(listen_sock);
 		return (1);
@@ -163,7 +159,7 @@ auto	mvpServer(void) -> int {
 				ev.events = EPOLLIN | EPOLLET;
 				ev.data.fd = connection_socket;
 				if (epoll_ctl(pollfd, EPOLL_CTL_ADD, connection_socket, &ev) < 0) {
-					std::cerr << "failed to add incoming connection to epoll instance\n";
+					INFO("failed to add incoming connection to epoll instance");
 					close(connection_socket);
 					server_rv = 1;
 					break ;
@@ -176,7 +172,7 @@ auto	mvpServer(void) -> int {
 				if (rv < 0)
 					perror(strerror(errno));
 				if (rv == 0)
-					std::cerr << "end of file found in incoming connection\n";
+					INFO("end of file found in incoming connection");
 				current->events = EPOLLOUT | EPOLLET;
 				epoll_ctl(pollfd, EPOLL_CTL_MOD, current->data.fd, current);
 			} else { // new write event
@@ -193,6 +189,6 @@ auto	mvpServer(void) -> int {
 	signal(SIGINT, originalIntHandler);
 	close(listen_sock);
 	close(pollfd);
-	std::cout << total << " messages processed\n";
+	INFO(+ std::to_string(total) + " messages processed"s); // text replacement hell
 	return (server_rv);
 }

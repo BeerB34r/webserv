@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/02/16 19:03:36 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/03/10 18:12:57 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/03/10 18:16:00 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -25,8 +25,6 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
-#include <iostream>
-
 #include <global.hpp>
 #include <debug.hpp>
 #include <cmdline.hpp>
@@ -37,8 +35,8 @@ auto	main(int ac, char **av) -> int {
 		return (argres - 1);
 	}
 	if (global::fun_allowed)
-		std::cout << "LETS FUCKING GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO!!!!\n";
+		INFO("LETS FUCKING GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO!!!!");
 	else
-		std::cout << "Hello, World!\n";
+		INFO("Hello, World!");
 	return (mvpServer());
 }
