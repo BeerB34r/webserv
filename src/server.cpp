@@ -28,16 +28,18 @@
 #include <asm-generic/socket.h>
 #include <csignal>
 #include <functional>
-#include <future>
+#include <map>
 #include <server.hpp>
 
 #include <iostream>
-#include <sstream>
 #include <cstring>
+#include <sstream>
 #include <sys/socket.h>
+#include <sys/epoll.h>
+#include <sys/types.h>
 #include <netinet/ip.h>
-#include <thread>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include <HTTPMessage.hpp>
 
@@ -52,12 +54,13 @@ auto	createSocket(short port) -> int {
 		std::cerr << "failed to create network socket\n";
 		return (-1);
 	}
-	struct sockaddr_in	addr = {};
 
+	struct sockaddr_in	addr = {};
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	int	reuse = 1;
+
 	// allow reuse of address and port
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
 		perror(strerror(errno));
@@ -107,80 +110,88 @@ typedef std::function<HTTPMessage(Maybe<HTTPMessage>)> RequestHandler;
 
 bool	stop;
 
-// instance of the RequestHandler function type
-auto	dummyRequestHandler(Maybe<HTTPMessage> request) -> HTTPMessage {
-	if (!request) return HTTPMessage("HTTP/1.1 400 Bad request", {}, "");
-	else return HTTPMessage("HTTP/1.1 404 Not found", {}, "");
+auto	intHandler([[maybe_unused]] int signum) -> void {
+	stop = true;
 }
 
-auto	handleIncomingTraffic(int fd, RequestHandler handler) -> int {
-	char	buf[BUFFER_SIZE];
-	int	bytes;
-	std::string	in;
-	Maybe<HTTPMessage>	message;
-	do {
-		bytes = read(fd, buf, BUFFER_SIZE);
-		if (bytes < 0) {
-			std::cerr << "read error\n";
-			return 1;
-		}
-		in.append(buf, bytes);
-		message = readHTTPrequest(in);
-		if (in == "stop") stop = true;
-		if (!message && bytes != BUFFER_SIZE) std::cerr << "incoming traffic not recognised as http request\n";
-	} while (bytes == BUFFER_SIZE);
-	std::stringstream	ss;
-	ss << handler(message);
-	if (write(fd, ss.str().c_str(), ss.str().size())) {};
-	close(fd);
-	return (0);
-}
+const HTTPMessage	notFound("HTTP/1.1 404 Not found", {}, "");
+const HTTPMessage	badRequest("HTTP/1.1 400 Bad request", {}, "");
 
-auto	threadFunc(const int fd) -> int {
-	int	rv = handleIncomingTraffic(fd, dummyRequestHandler);
-	close(fd);
-	return (rv);
-}
-
-
+#define MAX_EVENTS 10
 auto	mvpServer(void) -> int {
 	using namespace std::literals;
 	using fd = int;
 
-	// set up network socket
-	const fd	socket = createSocket(PORT);
-	if (socket < 0) return (1);
+	int	server_rv = 0;
 
-	// minions
-	std::vector<std::future<int>>	threads;
+	// set up network socket
+	const fd	listen_sock = createSocket(PORT);
+	if (listen_sock < 0) return (1);
+
+	// set up epoll
+	struct epoll_event	events[MAX_EVENTS];
+	const fd	pollfd = epoll_create1(0);
+	if (pollfd < 0) {
+		std::cerr << "failed to create epoll instance\n";
+		close(listen_sock);
+		return (1);
+	}
+
+	// add the listening socket into epoll
+	struct epoll_event	ev;
+	ev.events = EPOLLIN;
+	ev.data.fd = listen_sock;
+	if (epoll_ctl(pollfd, EPOLL_CTL_ADD, listen_sock, &ev) < 0) {
+		std::cerr << "failed to add network socket into epoll instance\n";
+		close(pollfd);
+		close(listen_sock);
+		return (1);
+	}
+
+	__sighandler_t	originalIntHandler = signal(SIGINT, intHandler);
 	int total = 0; // total connections
-	while (!stop) {
-		for (unsigned int i = 0; i < threads.size(); i++) {
-			if (std::future_status::ready == threads[i].wait_for(0ms)) {
-				int rv = threads[i].get();
-				threads.erase(threads.begin() + i);
-				if (rv) goto error;
+	std::map<int, std::string>	connection_data;
+	while (!stop || server_rv) {
+		int	nfds = epoll_wait(pollfd, events, MAX_EVENTS, 0);
+		for (int n = 0; n < nfds; n++) {
+			struct epoll_event	*current = &events[n];
+
+			// new connection
+			if (current->data.fd == listen_sock) {
+				fd	connection_socket = getIncomingConnection(listen_sock);
+				if (connection_socket < 0) continue ;
+				ev.events = EPOLLIN | EPOLLET;
+				ev.data.fd = connection_socket;
+				if (epoll_ctl(pollfd, EPOLL_CTL_ADD, connection_socket, &ev) < 0) {
+					std::cerr << "failed to add incoming connection to epoll instance\n";
+					close(connection_socket);
+					server_rv = 1;
+					break ;
+				}
+			} else if (current->events & EPOLLIN) { // new read event
+				char	buf[BUFFER_SIZE];
+				int	rv = recv(current->data.fd, buf, BUFFER_SIZE, 0);
+				// check HTTP around here to prevent requests that are too large
+				connection_data[current->data.fd].append(buf, rv);
+				if (rv < 0)
+					perror(strerror(errno));
+				if (rv == 0)
+					std::cerr << "end of file found in incoming connection\n";
+				current->events = EPOLLOUT | EPOLLET;
+				epoll_ctl(pollfd, EPOLL_CTL_MOD, current->data.fd, current);
+			} else { // new write event
+				std::stringstream	ss;
+				if (readHTTPmessage(connection_data[current->data.fd])) ss << notFound;
+				else ss << badRequest;
+				send(current->data.fd, ss.str().c_str(), ss.str().length(), 0);
+				total++;
+				close(current->data.fd);
 			}
 		}
-		fd	peerFD = getIncomingConnection(socket);
-		if (peerFD < 0) goto error;
-		threads.push_back(std::async(std::launch::async, threadFunc, peerFD));
-		total += 1;
 	}
-	close(socket);
+	signal(SIGINT, originalIntHandler);
+	close(listen_sock);
+	close(pollfd);
 	std::cout << total << " messages processed\n";
-	std::cout << "threads at exit: " << threads.size() << "\n";
-	for (std::future<int>& f : threads) {
-		f.wait();
-		(void)f.get();
-	}
-	return (0);
-error: // MY WORLDS ON FIRE, HOW BOUT YOURS
-	close(socket);
-	std::cout << "threads at exit: " << threads.size() << "\n";
-	for (std::future<int>& f : threads) {
-		f.wait();
-		(void)f.get();
-	}
-	return (1);
+	return (server_rv);
 }
