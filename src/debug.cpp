@@ -43,7 +43,7 @@ namespace debug {
 
 	auto	_log(const std::string& s) -> void {
 		if (!global::log) return ;
-		static std::fstream	os(global::logfile);
+		static std::fstream	os(global::logfile, std::ios::out);
 
 		if (!os.is_open()) return ;
 		os << s << "\n";

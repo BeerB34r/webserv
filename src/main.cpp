@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/02/16 19:03:36 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/03/05 20:09:55 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/03/10 18:12:57 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -28,6 +28,7 @@
 #include <iostream>
 
 #include <global.hpp>
+#include <debug.hpp>
 #include <cmdline.hpp>
 #include <server.hpp>
 

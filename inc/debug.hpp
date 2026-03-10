@@ -31,3 +31,4 @@ namespace debug {
 	auto _print(const std::string&) -> void;
 	auto _log(const std::string&) -> void;
 } // namespace debug
+#define DEBUG(x) debug::p(x)
