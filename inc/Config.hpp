@@ -29,6 +29,7 @@
 # define CONFIG_HPP
 
 #include <map>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -48,6 +49,7 @@ struct	Config {
 };
 
 auto	fromType(Config::Type) -> const std::string;
+auto	readConfigFile(const std::string&) -> std::optional<Config>;
 
 #include <Parser.hpp>
 namespace ConfigParse {

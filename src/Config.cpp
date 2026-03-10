@@ -26,6 +26,9 @@
 /* ************************************************************************** */
 
 #include <Config.hpp>
+#include <debug.hpp>
+#include <fstream>
+#include <sstream>
 
 auto	Config::empty(void) const noexcept -> bool {
 	return (blocks.empty() && values.empty());
@@ -52,4 +55,16 @@ auto	fromType(Config::Type t) -> const std::string {
 		case (Config::TOP_LEVEL): return "Config file";
 		default: return "";
 	}
+}
+
+auto	readConfigFile(const std::string &fname) -> std::optional<Config> {
+	std::ifstream	fs(fname);
+	if (!fs.is_open()) {
+		WARN("could not open " + fname);
+		return std::nullopt;
+	}
+	std::ostringstream	oss;
+	oss << fs.rdbuf();
+	std::string	content = oss.str();
+	return ConfigParse::config(content).transform([](auto p){ return p.second; });
 }

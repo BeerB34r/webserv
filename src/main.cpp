@@ -29,6 +29,7 @@
 #include <debug.hpp>
 #include <cmdline.hpp>
 #include <server.hpp>
+#include <Config.hpp>
 
 auto	main(int ac, char **av) -> int {
 	if (int argres = cmdlineArgs(ac, av)) {
@@ -38,5 +39,10 @@ auto	main(int ac, char **av) -> int {
 		INFO("LETS FUCKING GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO!!!!");
 	else
 		INFO("Hello, World!");
+	std::optional<Config>	conf = readConfigFile(av[0]);
+	if (!conf) {
+		FATAL("invalid config file");
+		return (1);
+	}
 	return (mvpServer());
 }
