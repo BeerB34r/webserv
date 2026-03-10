@@ -49,7 +49,7 @@
 auto	createSocket(short port) -> int {
 	int	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (sock < 0) {
-		std::cerr << "failed to create socket\n";
+		std::cerr << "failed to create network socket\n";
 		return (-1);
 	}
 	struct sockaddr_in	addr = {};
@@ -61,12 +61,12 @@ auto	createSocket(short port) -> int {
 	// allow reuse of address and port
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
 		perror(strerror(errno));
-		std::cerr << "failed while setting socket option \"reuse address\"\n";
+		std::cerr << "failed while setting network socket option \"reuse address\"\n";
 		goto error;
 	}
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) {
 		perror(strerror(errno));
-		std::cerr << "failed while setting socket option \"reuse port\"\n";
+		std::cerr << "failed while setting network socket option \"reuse port\"\n";
 		goto error;
 	}
 	// do not let the port remain open after the program closes
@@ -75,17 +75,17 @@ auto	createSocket(short port) -> int {
 	lin.l_onoff = 0;
 	if (setsockopt(sock, SOL_SOCKET, SO_LINGER, reinterpret_cast<const char *>(&lin), sizeof(lin))) {
 		perror(strerror(errno));
-		std::cerr << "failed while setting socket option \"linger\"\n";
+		std::cerr << "failed while setting network socket option \"linger\"\n";
 		goto error;
 	}
 
 	if (bind(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr))) {
 		perror(strerror(errno));
-		std::cerr << "failed to bind socket\n";
+		std::cerr << "failed to bind network socket\n";
 		goto error;
 	}
 	if (listen(sock, LISTEN_BACKLOG) == -1) {
-		std::cerr << "failed to listen on socket\n";
+		std::cerr << "failed to listen on network socket\n";
 		goto error;
 	}
 	return (sock);
@@ -146,11 +146,14 @@ auto	threadFunc(const int fd) -> int {
 auto	mvpServer(void) -> int {
 	using namespace std::literals;
 	using fd = int;
+
+	// set up network socket
 	const fd	socket = createSocket(PORT);
 	if (socket < 0) return (1);
 
+	// minions
 	std::vector<std::future<int>>	threads;
-	int total = 0;
+	int total = 0; // total connections
 	while (!stop) {
 		for (unsigned int i = 0; i < threads.size(); i++) {
 			if (std::future_status::ready == threads[i].wait_for(0ms)) {
