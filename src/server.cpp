@@ -150,6 +150,7 @@ auto	mvpServer(void) -> int {
 	if (socket < 0) return (1);
 
 	std::vector<std::future<int>>	threads;
+	int total = 0;
 	while (!stop) {
 		for (unsigned int i = 0; i < threads.size(); i++) {
 			if (std::future_status::ready == threads[i].wait_for(0ms)) {
@@ -161,8 +162,10 @@ auto	mvpServer(void) -> int {
 		fd	peerFD = getIncomingConnection(socket);
 		if (peerFD < 0) goto error;
 		threads.push_back(std::async(std::launch::async, threadFunc, peerFD));
+		total += 1;
 	}
 	close(socket);
+	std::cout << total << " messages processed\n";
 	std::cout << "threads at exit: " << threads.size() << "\n";
 	for (std::future<int>& f : threads) {
 		f.wait();
