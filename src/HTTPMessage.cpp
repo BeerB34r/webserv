@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/02/19 16:07:22 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/02/19 18:23:42 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/03/10 20:14:55 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -63,11 +63,15 @@ static inline auto	populateFields(const std::vector<String>& fieldlines) -> std:
 	return fields;
 }
 
-static inline auto	populateResponseData(const String& startline) -> HTTPMessage::ResponseData {
+static inline auto	populateResponseData(const String& startline) noexcept -> HTTPMessage::ResponseData {
 	String	httpVersion = startline.substr(0, startline.find(' '));
 	String	statusCode = startline.substr(startline.find(' ') + 1, 3);
 	String	reasonPhrase = startline.substr(startline.find(statusCode) + 4);
-	return {httpVersion, std::stoi(statusCode), reasonPhrase};
+	return {
+		httpVersion,
+		std::stoi(statusCode), // cannot throw on valid input, never called on invalid input
+		reasonPhrase
+	};
 }
 
 HTTPMessage::HTTPMessage(const String& startline, const std::vector<String>& fieldlines, const String& body) noexcept : startline(startline), fieldlines(fieldlines), body(body) {

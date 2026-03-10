@@ -25,7 +25,10 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
-#include <Parser.hpp>
+#ifndef HTTPPARSING_HPP
+# define HTTPPARSING_HPP
+
+# include <Parser.hpp>
 // plumbing
 namespace HTTPparsing {
 	template <typename T>
@@ -87,6 +90,8 @@ namespace HTTPparsing {
 	extern const Parser<String>	startLine;
 	extern const Parser<String>	messageBody;
 }
+#endif // HTTPPARSING_HPP
+
 // [NOTE] taken from RFC-editor.org
 // the variables defined under HTTPparsing are based entirely on the following
 // Augmented Backus-naur form of an http message:

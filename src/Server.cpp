@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                            ::::::::        */
-/*   server.cpp                                              :+:    :+:       */
+/*   Server.cpp                                              :+:    :+:       */
 /*                                                          +:+               */
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
-/*   Created: 2026/03/06 16:08:37 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/03/06 16:28:10 by mde-beer            ########   odam.nl   */
+/*   Created: 2026/03/10 19:57:48 by mde-beer            #+#    #+#           */
+/*   Updated: 2026/03/10 20:19:09 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -25,11 +25,14 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
+#include <Server.hpp>
+#include <charconv>
+#include <vector>
+
 #include <asm-generic/socket.h>
 #include <csignal>
 #include <functional>
 #include <map>
-#include <server.hpp>
 
 #include <cstring>
 #include <sstream>
@@ -42,6 +45,35 @@
 
 #include <debug.hpp>
 #include <HTTPMessage.hpp>
+
+static auto	to_int(const std::string& s) noexcept -> std::optional<int> {
+	int	rv{};
+	if (std::from_chars(s.data(), s.data() + s.size(), rv).ec == std::errc{}) {
+		return rv;
+	}
+	else return std::nullopt;
+}
+
+auto	fromConfig(const Config& c) -> std::vector<Server> {
+	std::vector<Server>	rv;
+
+	if (!c.contains(Config::SERVER)) {
+		Server s;
+		s.blocks = c.blocks;
+		s.ident = c.ident;
+		s.values = c.values;
+		s.port = *to_int(c.values.at("listen"));
+		rv.push_back(s);
+	} else for (Config& current : c.getBlocks(Config::SERVER)) {
+		Server s;
+		s.blocks = current.blocks;
+		s.ident = current.ident;
+		s.values = current.values;
+		s.port = *to_int(current.values.at("listen"));
+		rv.push_back(s);
+	}
+	return rv;
+}
 
 #define PORT 8080
 #define LISTEN_BACKLOG 50
@@ -113,48 +145,65 @@ auto	intHandler([[maybe_unused]] int signum) -> void {
 const HTTPMessage	notFound("HTTP/1.1 404 Not found", {}, "");
 const HTTPMessage	badRequest("HTTP/1.1 400 Bad request", {}, "");
 
+static auto	closeMap(std::map<int,Server>&	fds) -> void {
+	for (auto fd : fds) close(fd.first);
+}
+
 #define MAX_EVENTS 10
-auto	mvpServer(void) -> int {
+auto	mvpServer([[maybe_unused]] const std::vector<Server>& servers) -> int {
 	using namespace std::literals;
 	using fd = int;
 
 	int	server_rv = 0;
 
-	// set up network socket
-	const fd	listen_sock = createSocket(PORT);
-	if (listen_sock < 0) return (1);
+	// set up network sockets
+	std::map<fd,Server>	listeners;
+	for (const Server& s : servers) {
+		const fd	sock = createSocket(s.port);
+		if (sock < 0) {
+			closeMap(listeners);
+			return (1);
+		}
+		listeners[sock] = s;
+	}
+
+	/*const fd	listen_sock = createSocket(PORT);*/
+	/*if (listen_sock < 0) return (1);*/
 
 	// set up epoll
 	struct epoll_event	events[MAX_EVENTS];
 	const fd	pollfd = epoll_create1(0);
 	if (pollfd < 0) {
 		FATAL("failed to create epoll instance");
-		close(listen_sock);
+		closeMap(listeners);
 		return (1);
 	}
 
-	// add the listening socket into epoll
+	// add the listening sockets into epoll
 	struct epoll_event	ev;
+	for (std::pair<const int,Server> sock : listeners) {
 	ev.events = EPOLLIN;
-	ev.data.fd = listen_sock;
-	if (epoll_ctl(pollfd, EPOLL_CTL_ADD, listen_sock, &ev) < 0) {
+	ev.data.fd = sock.first;
+	if (epoll_ctl(pollfd, EPOLL_CTL_ADD, sock.first, &ev) < 0) {
 		FATAL("failed to add network socket into epoll instance");
 		close(pollfd);
-		close(listen_sock);
+		closeMap(listeners);
 		return (1);
+		}
 	}
 
 	__sighandler_t	originalIntHandler = signal(SIGINT, intHandler);
 	int total = 0; // total connections
-	std::map<int, std::string>	connection_data;
+	std::map<int,std::string>	connection_data;
+	std::map<int,Server>		fdToConfig;
 	while (!stop || server_rv) {
 		int	nfds = epoll_wait(pollfd, events, MAX_EVENTS, 0);
 		for (int n = 0; n < nfds; n++) {
 			struct epoll_event	*current = &events[n];
 
 			// new connection
-			if (current->data.fd == listen_sock) {
-				fd	connection_socket = getIncomingConnection(listen_sock);
+			if (listeners.contains(current->data.fd)) {
+				fd	connection_socket = getIncomingConnection(current->data.fd);
 				if (connection_socket < 0) continue ;
 				ev.events = EPOLLIN | EPOLLET;
 				ev.data.fd = connection_socket;
@@ -164,6 +213,7 @@ auto	mvpServer(void) -> int {
 					server_rv = 1;
 					break ;
 				}
+				fdToConfig[connection_socket] = listeners[current->data.fd];
 			} else if (current->events & EPOLLIN) { // new read event
 				char	buf[BUFFER_SIZE];
 				int	rv = recv(current->data.fd, buf, BUFFER_SIZE, 0);
@@ -181,13 +231,15 @@ auto	mvpServer(void) -> int {
 				else ss << badRequest;
 				send(current->data.fd, ss.str().c_str(), ss.str().length(), 0);
 				total++;
+				INFO("responded to connection on port " + std::to_string(fdToConfig[current->data.fd].port));
 				close(current->data.fd);
 				connection_data.erase(current->data.fd);
+				fdToConfig.erase(current->data.fd);
 			}
 		}
 	}
 	signal(SIGINT, originalIntHandler);
-	close(listen_sock);
+	closeMap(listeners);
 	close(pollfd);
 	INFO(+ std::to_string(total) + " messages processed"s); // text replacement hell
 	return (server_rv);
