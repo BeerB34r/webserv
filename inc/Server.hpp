@@ -32,6 +32,9 @@
 
 struct Server : public Config {
 	short port;
+	std::function<bool(Server&, int, struct epoll_event*)>	readEventHandler;
+	std::function<bool(Server&, int, struct epoll_event*)>	writeEventHandler;
+	std::map<int,std::string>	client_data;
 };
 
 auto	fromConfig(const Config&) -> std::vector<Server>;

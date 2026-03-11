@@ -54,6 +54,36 @@ static auto	to_int(const std::string& s) noexcept -> std::optional<int> {
 	else return std::nullopt;
 }
 
+const HTTPMessage	notFound("HTTP/1.1 404 Not found", {}, "");
+const HTTPMessage	badRequest("HTTP/1.1 400 Bad request", {}, "");
+
+#define BUFFER_SIZE 1024
+auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct epoll_event* ev) -> bool {
+	std::stringstream	ss;
+	if (readHTTPmessage(self.client_data[ev->data.fd])) ss << notFound;
+	else ss << badRequest;
+	send(ev->data.fd, ss.str().c_str(), ss.str().length(), 0);
+	INFO("responded to connection on port " + std::to_string(self.port));
+	close(ev->data.fd);
+	self.client_data.erase(ev->data.fd);
+	return (true);
+}
+
+auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev) -> bool {
+	char	buf[BUFFER_SIZE];
+	int	rv = recv(ev->data.fd, buf, BUFFER_SIZE, 0);
+	// check HTTP around here to prevent requests that are too large
+	self.client_data[ev->data.fd].append(buf, rv);
+	if (rv < 0)
+		perror(strerror(errno));
+	if (rv == 0)
+		INFO("end of file found in incoming connection");
+	// should probably loop so we get the entire message because ET
+	ev->events = EPOLLOUT | EPOLLET;
+	epoll_ctl(pollfd, EPOLL_CTL_MOD, ev->data.fd, ev);
+	return (false);
+}
+
 auto	fromConfig(const Config& c) -> std::vector<Server> {
 	std::vector<Server>	rv;
 
@@ -63,6 +93,8 @@ auto	fromConfig(const Config& c) -> std::vector<Server> {
 		s.ident = c.ident;
 		s.values = c.values;
 		s.port = *to_int(c.values.at("listen"));
+		s.writeEventHandler = defaultWriteEventHandler;
+		s.readEventHandler = defaultReadEventHandler;
 		rv.push_back(s);
 	} else for (Config& current : c.getBlocks(Config::SERVER)) {
 		Server s;
@@ -70,6 +102,8 @@ auto	fromConfig(const Config& c) -> std::vector<Server> {
 		s.ident = current.ident;
 		s.values = current.values;
 		s.port = *to_int(current.values.at("listen"));
+		s.writeEventHandler = defaultWriteEventHandler;
+		s.readEventHandler = defaultReadEventHandler;
 		rv.push_back(s);
 	}
 	return rv;
@@ -77,7 +111,6 @@ auto	fromConfig(const Config& c) -> std::vector<Server> {
 
 #define PORT 8080
 #define LISTEN_BACKLOG 50
-#define BUFFER_SIZE 1024
 
 // returns negative value on error
 auto	createSocket(short port) -> int {
@@ -142,13 +175,11 @@ auto	intHandler([[maybe_unused]] int signum) -> void {
 	INFO("SIGINT recieved, exiting gracefully");
 }
 
-const HTTPMessage	notFound("HTTP/1.1 404 Not found", {}, "");
-const HTTPMessage	badRequest("HTTP/1.1 400 Bad request", {}, "");
-
 static auto	closeMap(std::map<int,Server>&	fds) -> void {
 	for (auto fd : fds) close(fd.first);
 }
 
+#include <ranges>
 #define MAX_EVENTS 10
 auto	mvpServer(const std::vector<Server>& servers) -> int {
 	using namespace std::literals;
@@ -192,15 +223,13 @@ auto	mvpServer(const std::vector<Server>& servers) -> int {
 
 	__sighandler_t	originalIntHandler = signal(SIGINT, intHandler);
 	int message_count = 0;
-	std::map<fd,std::string>	connection_data;
 	std::map<fd,Server>		fdToConfig;
 	while (!stop || server_rv) {
 		int	nfds = epoll_wait(pollfd, events, MAX_EVENTS, 0);
 		for (int n = 0; n < nfds; n++) {
 			struct epoll_event	*current = &events[n];
 
-			// new connection
-			if (listeners.contains(current->data.fd)) {
+			if (listeners.contains(current->data.fd)) { // new connection
 				fd	connection_socket = getIncomingConnection(current->data.fd);
 				if (connection_socket < 0) continue ;
 				ev.events = EPOLLIN | EPOLLET;
@@ -212,28 +241,13 @@ auto	mvpServer(const std::vector<Server>& servers) -> int {
 					break ;
 				}
 				fdToConfig[connection_socket] = listeners[current->data.fd];
-			} else if (current->events & EPOLLIN) { // new read event
-				char	buf[BUFFER_SIZE];
-				int	rv = recv(current->data.fd, buf, BUFFER_SIZE, 0);
-				// check HTTP around here to prevent requests that are too large
-				connection_data[current->data.fd].append(buf, rv);
-				if (rv < 0)
-					perror(strerror(errno));
-				if (rv == 0)
-					INFO("end of file found in incoming connection");
-				// should probably loop so we get the entire message because ET
-				current->events = EPOLLOUT | EPOLLET;
-				epoll_ctl(pollfd, EPOLL_CTL_MOD, current->data.fd, current);
-			} else { // new write event
-				std::stringstream	ss;
-				if (readHTTPmessage(connection_data[current->data.fd])) ss << notFound;
-				else ss << badRequest;
-				send(current->data.fd, ss.str().c_str(), ss.str().length(), 0);
-				message_count++;
-				INFO("responded to connection on port " + std::to_string(fdToConfig[current->data.fd].port));
-				close(current->data.fd);
-				connection_data.erase(current->data.fd);
-				fdToConfig.erase(current->data.fd);
+			} else  { // new client event
+				Server&	serverConfig = fdToConfig[current->data.fd];
+				if (current->events & EPOLLIN
+					? message_count++, serverConfig.readEventHandler(serverConfig, pollfd, current)
+					: serverConfig.writeEventHandler(serverConfig, pollfd, current)
+					)
+					fdToConfig.erase(current->data.fd);
 			}
 		}
 	}
