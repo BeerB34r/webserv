@@ -26,25 +26,28 @@
 /* ************************************************************************** */
 
 #include <Server.hpp>
-#include <charconv>
-#include <vector>
 
-#include <asm-generic/socket.h>
+#include <vector>
+#include <charconv>
+#include <cstring>
+#include <sstream>
+#include <fstream>
 #include <csignal>
 #include <functional>
 #include <map>
 
-#include <cstring>
-#include <sstream>
+#include <asm-generic/socket.h>
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <netinet/ip.h>
 #include <unistd.h>
 #include <fcntl.h>
 
 #include <debug.hpp>
 #include <HTTPMessage.hpp>
+#include <HTTPparsing.hpp>
 
 static auto	to_int(const std::string& s) noexcept -> std::optional<int> {
 	int	rv{};
@@ -54,16 +57,61 @@ static auto	to_int(const std::string& s) noexcept -> std::optional<int> {
 	else return std::nullopt;
 }
 
-const HTTPMessage	notFound("HTTP/1.1 404 Not found", {}, "");
-const HTTPMessage	badRequest("HTTP/1.1 400 Bad request", {}, "");
+const HTTPMessage	notFound("HTTP/1.1 404 Not found");
+const HTTPMessage	badRequest("HTTP/1.1 400 Bad request");
+
+auto	fulfillRequestTarget(const std::string& target) -> HTTPMessage {
+	struct stat statbuf;
+
+	if (access(target.data(), R_OK)) {
+		WARN("could not access requestTarget");
+		return HTTPMessage("HTTP/1.1 403 Forbidden");
+	} else if (stat(target.data(), &statbuf)) {
+		WARN("could not stat request target");
+		return HTTPMessage("HTTP/1.1 403 Forbidden");
+	} else switch (statbuf.st_mode & S_IFMT) {
+		case (S_IFDIR): {
+			INFO("request target is a directory");
+			return HTTPMessage("HTTP/1.1 501 Not implemented");
+		};
+		case (S_IFREG): {
+			INFO("request target is a regular file");
+			std::ifstream	file(target);
+			if (!file.is_open()) {
+				WARN("could not open requested file");
+				return HTTPMessage("HTTP/1.1 500 Internal server error");
+			}
+			std::stringstream	ss;
+			ss << file.rdbuf();
+			return HTTPMessage("HTTP/1.1 200 OK", {"content-length:" + std::to_string(ss.str().length())}, ss.str());
+		}
+		default : {
+			WARN("request target is unsupported");
+			return HTTPMessage("HTTP/1.1 403 Forbidden");
+		}
+	}
+}
 
 #define BUFFER_SIZE 1024
 auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct epoll_event* ev) -> bool {
 	std::stringstream	ss;
-	if (readHTTPmessage(self.client_data[ev->data.fd])) ss << notFound;
+	std::optional<HTTPMessage>	http = readHTTPrequest(self.client_data[ev->data.fd]);
+	std::optional<std::string>	target = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
+			return HTTPparsing::originForm(std::get<HTTPMessage::RequestData>(m.getData()).requestTarget).transform([](auto p) -> std::string { return p.second;});;
+			}).transform([self](std::string s) -> std::string {
+				if (self.root.ends_with('/')) {
+					return self.root + HTTPparsing::absolutePath(s)->second.substr(1); // cannot fail
+				} else {
+					return self.root + HTTPparsing::absolutePath(s)->second; // cannot fail
+				}
+			});
+	if (http // is the http valid?
+		&& target // is there a valid target?
+		) ss << fulfillRequestTarget(*target);
 	else ss << badRequest;
 	send(ev->data.fd, ss.str().c_str(), ss.str().length(), 0);
 	INFO("responded to connection on port " + std::to_string(self.port));
+	INFO("request target: " + *target);
 	close(ev->data.fd);
 	self.client_data.erase(ev->data.fd);
 	return (true);
@@ -93,6 +141,7 @@ auto	fromConfig(const Config& c) -> std::vector<Server> {
 		s.ident = c.ident;
 		s.values = c.values;
 		s.port = *to_int(c.values.at("listen"));
+		s.root = c.values.at("root");
 		s.writeEventHandler = defaultWriteEventHandler;
 		s.readEventHandler = defaultReadEventHandler;
 		rv.push_back(s);
@@ -102,6 +151,7 @@ auto	fromConfig(const Config& c) -> std::vector<Server> {
 		s.ident = current.ident;
 		s.values = current.values;
 		s.port = *to_int(current.values.at("listen"));
+		s.root = c.values.at("root");
 		s.writeEventHandler = defaultWriteEventHandler;
 		s.readEventHandler = defaultReadEventHandler;
 		rv.push_back(s);

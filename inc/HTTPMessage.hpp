@@ -73,7 +73,7 @@ public:
 	};
 
 	HTTPMessage() = delete;
-	HTTPMessage(const std::string& startline, const std::vector<std::string>& fieldlines, const std::string& body) noexcept;
+	HTTPMessage(const std::string& startline, const std::vector<std::string>& fieldlines = {}, const std::string& body = "") noexcept;
 	HTTPMessage(const HTTPMessage&) noexcept = default;
 	HTTPMessage&	operator=(const HTTPMessage&) noexcept = default;
 	virtual	~HTTPMessage() noexcept = default;

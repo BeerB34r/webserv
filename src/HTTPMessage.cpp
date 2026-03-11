@@ -212,4 +212,8 @@ auto	toString(const HTTPMessage::HTTPMethod& m) noexcept -> String {
 	for (struct MethodPair p : methodPairs) if (p.m == m) return p.s;
 	return "UNKNOWN";
 }
+
+auto	HTTPMessage::getData(void) const noexcept -> const std::variant<RequestData,ResponseData>& {
+	return data;
+}
 #undef _methodPair

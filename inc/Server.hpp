@@ -33,8 +33,10 @@
 struct Server : public Config {
 	using eventHandler = std::function<bool(Server&, int, struct epoll_event*)>;
 	short	port;
+	std::string	root;
 	eventHandler	readEventHandler;
 	eventHandler	writeEventHandler;
+	auto	toLocal(const std::string&) -> std::string;
 	std::map<int,std::string>	client_data;
 };
 
