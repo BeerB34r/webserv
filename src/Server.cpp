@@ -74,7 +74,7 @@ auto	fulfillRequestTarget(const std::string& request, const std::string& target)
 		return HTTPMessage("HTTP/1.1 403 Forbidden");
 	} else switch (statbuf.st_mode & S_IFMT) {
 		case (S_IFDIR): {
-			INFO("request target is a directory");
+			// [TODO]: maybe, prevent path traversal attacks
 			DIR* dir = opendir(target.data());
 			if (!dir) {
 				WARN("could not open requested directory");
@@ -84,14 +84,13 @@ auto	fulfillRequestTarget(const std::string& request, const std::string& target)
 			std::stringstream	ss;
 			ss << "<!DOCTYPE html>\n<html>\n";
 			for (ss << "<title>Directory Listing</title>\n<body>\n\t<h1>Directory Listing</h1>\n\t<ul>\n"; (dirent = readdir(dir));) {
-				ss << "\t\t<li><a href=\"" + request + dirent->d_name + "\">" << dirent->d_name << "</a></li>\n";
+				ss << "\t\t<li><a href=\"" + (request.ends_with('/') ? request : request + '/') + dirent->d_name + "\">" << dirent->d_name << "</a></li>\n";
 			}
 			ss << "\t</ul>\n<body>\n</html>\n";
 			closedir(dir);
 			return HTTPMessage("HTTP/1.1 200 OK", {"content-length:" + std::to_string(ss.str().length())}, ss.str());
 		};
 		case (S_IFREG): {
-			INFO("request target is a regular file");
 			std::ifstream	file(target);
 			if (!file.is_open()) {
 				WARN("could not open requested file");
@@ -110,6 +109,7 @@ auto	fulfillRequestTarget(const std::string& request, const std::string& target)
 
 #define BUFFER_SIZE 1024
 auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct epoll_event* ev) -> bool {
+	bool	should_close = true;
 	std::stringstream	ss;
 	std::optional<HTTPMessage>	http = readHTTPrequest(self.client_data[ev->data.fd]);
 	std::optional<std::string>	target = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
@@ -127,22 +127,32 @@ auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct 
 		) ss << fulfillRequestTarget(std::get<HTTPMessage::RequestData>(http->getData()).requestTarget, *target);
 	else ss << badRequest;
 	send(ev->data.fd, ss.str().c_str(), ss.str().length(), 0);
-	INFO("responded to connection on port " + std::to_string(self.port));
-	if (target) INFO("request target: " + *target);
-	close(ev->data.fd);
-	self.client_data.erase(ev->data.fd);
+	self.client_data[ev->data.fd] = "";
+	if (should_close) {
+		close(ev->data.fd);
+		self.client_data.erase(ev->data.fd);
+	} else {
+		ev->events = EPOLLIN | EPOLLET;
+		epoll_ctl(pollfd, EPOLL_CTL_MOD, ev->data.fd, ev);
+	}
+	INFO("request from port " + std::to_string(self.port) + " fulfilled");
 	return (true);
 }
 
 auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev) -> bool {
 	char	buf[BUFFER_SIZE];
-	int	rv = recv(ev->data.fd, buf, BUFFER_SIZE, 0);
-	// check HTTP around here to prevent requests that are too large
-	self.client_data[ev->data.fd].append(buf, rv);
-	if (rv < 0)
-		perror(strerror(errno));
-	if (rv == 0)
-		INFO("end of file found in incoming connection");
+	int rv;
+	while ((rv = recv(ev->data.fd, buf, BUFFER_SIZE, MSG_DONTWAIT)) > 0)
+		self.client_data[ev->data.fd].append(buf, rv);
+	if (rv < 0) { // assume error is EAGAIN, not allowed to check cuz fuck you
+		INFO("end of current message from port " + std::to_string(self.port));
+	};
+	if (rv == 0) {
+		INFO("connection closed on port " + std::to_string(self.port));
+		close(ev->data.fd);
+		self.client_data.erase(ev->data.fd);
+		return (true);
+	}
 	// should probably loop so we get the entire message because ET
 	ev->events = EPOLLOUT | EPOLLET;
 	epoll_ctl(pollfd, EPOLL_CTL_MOD, ev->data.fd, ev);
@@ -158,7 +168,8 @@ auto	fromConfig(const Config& c) -> std::vector<Server> {
 		s.ident = c.ident;
 		s.values = c.values;
 		s.port = *to_int(c.values.at("listen"));
-		s.root = c.values.at("root");
+		INFO("root: " + c.values.at("root"));
+		s.root = c.values.at("root").substr(0, c.values.at("root").find(','));
 		s.writeEventHandler = defaultWriteEventHandler;
 		s.readEventHandler = defaultReadEventHandler;
 		rv.push_back(s);
@@ -168,7 +179,8 @@ auto	fromConfig(const Config& c) -> std::vector<Server> {
 		s.ident = current.ident;
 		s.values = current.values;
 		s.port = *to_int(current.values.at("listen"));
-		s.root = c.values.at("root");
+		INFO("root: " + current.values.at("root"));
+		s.root = current.values.at("root").substr(0, current.values.at("root").find(','));
 		s.writeEventHandler = defaultWriteEventHandler;
 		s.readEventHandler = defaultReadEventHandler;
 		rv.push_back(s);
@@ -307,13 +319,15 @@ auto	mvpServer(const std::vector<Server>& servers) -> int {
 					break ;
 				}
 				sockToServer[connection_socket] = listeners[socket];
+				INFO("opened connection on port " + std::to_string(listeners[socket].port));
 			} else  { // new client event
 				Server&	serverConfig = sockToServer[socket];
 				if (current->events & EPOLLIN
-					? message_count++, serverConfig.readEventHandler(serverConfig, pollfd, current)
+					? serverConfig.readEventHandler(serverConfig, pollfd, current)
 					: serverConfig.writeEventHandler(serverConfig, pollfd, current)
 					) // can we pretend that airplanes in the night sky are like shooting stars
 					sockToServer.erase(socket);
+				message_count += !(current->events & EPOLLIN);
 			}
 		}
 	}

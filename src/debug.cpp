@@ -26,8 +26,10 @@
 /* ************************************************************************** */
 
 #include <debug.hpp>
-#include <fstream>
 #include <global.hpp>
+#include <fstream>
+#include <chrono>
+#include <iomanip>
 #include <iostream>
 
 namespace debug {
@@ -38,7 +40,8 @@ namespace debug {
 
 	auto	_print(const std::string& s, bool bypass) -> void {
 		if (!bypass && !global::verbose) return ;
-		std::clog << s << "\n";
+		std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+		std::clog << BOL BOLD << std::put_time(std::localtime(&now), "[%X]") << RESET << s << "\n";
 	}
 
 	auto	_log(const std::string& s, bool bypass) -> void {
@@ -46,6 +49,7 @@ namespace debug {
 		static std::fstream	os(global::logfile, std::ios::out);
 
 		if (!os.is_open()) return ;
-		os << s << "\n";
+		std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+		os << std::put_time(std::localtime(&now), "[%F-%X]" )<< s << "\n";
 	}
 }// namespace debug
