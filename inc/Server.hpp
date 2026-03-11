@@ -31,9 +31,10 @@
 #include <Config.hpp>
 
 struct Server : public Config {
-	short port;
-	std::function<bool(Server&, int, struct epoll_event*)>	readEventHandler;
-	std::function<bool(Server&, int, struct epoll_event*)>	writeEventHandler;
+	using eventHandler = std::function<bool(Server&, int, struct epoll_event*)>;
+	short	port;
+	eventHandler	readEventHandler;
+	eventHandler	writeEventHandler;
 	std::map<int,std::string>	client_data;
 };
 

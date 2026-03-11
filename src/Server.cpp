@@ -246,7 +246,7 @@ auto	mvpServer(const std::vector<Server>& servers) -> int {
 				if (current->events & EPOLLIN
 					? message_count++, serverConfig.readEventHandler(serverConfig, pollfd, current)
 					: serverConfig.writeEventHandler(serverConfig, pollfd, current)
-					)
+					) // can we pretend that airplanes in the night sky are like shooting stars
 					fdToConfig.erase(current->data.fd);
 			}
 		}
