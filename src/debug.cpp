@@ -31,18 +31,18 @@
 #include <iostream>
 
 namespace debug {
-	auto	p(const std::string& s) -> void {
-		if (global::verbose) _print(s);
-		if (global::log) _log(s);
+	auto	p(const std::string& s, bool bypass) -> void {
+		if (bypass || global::verbose) _print(s, bypass);
+		if (bypass || global::log) _log(s, bypass);
 	}
 
-	auto	_print(const std::string& s) -> void {
-		if (!global::verbose) return ;
+	auto	_print(const std::string& s, bool bypass) -> void {
+		if (!bypass && !global::verbose) return ;
 		std::clog << s << "\n";
 	}
 
-	auto	_log(const std::string& s) -> void {
-		if (!global::log) return ;
+	auto	_log(const std::string& s, bool bypass) -> void {
+		if (!bypass && !global::log) return ;
 		static std::fstream	os(global::logfile, std::ios::out);
 
 		if (!os.is_open()) return ;

@@ -83,7 +83,7 @@ auto	fromConfig(const Config& c) -> std::vector<Server> {
 auto	createSocket(short port) -> int {
 	int	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (sock < 0) {
-		FATAL("failed to create network socket");
+		ERROR("failed to create network socket");
 		return (-1);
 	}
 
@@ -94,11 +94,11 @@ auto	createSocket(short port) -> int {
 	int	reuse = 1;
 	// allow reuse of address and port
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
-		FATAL("failed while setting network socket option \"reuse address\"\n");
+		ERROR("failed while setting network socket option \"reuse address\"\n");
 		goto error;
 	}
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) {
-		FATAL("failed while setting network socket option \"reuse port\"");
+		ERROR("failed while setting network socket option \"reuse port\"");
 		goto error;
 	}
 	// do not let the port remain open after the program closes
@@ -106,16 +106,16 @@ auto	createSocket(short port) -> int {
 	lin.l_linger = 0;
 	lin.l_onoff = 0;
 	if (setsockopt(sock, SOL_SOCKET, SO_LINGER, reinterpret_cast<const char *>(&lin), sizeof(lin))) {
-		FATAL("failed while setting network socket option \"linger\"");
+		ERROR("failed while setting network socket option \"linger\"");
 		goto error;
 	}
 
 	if (bind(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr))) {
-		FATAL("failed to bind network socket");
+		ERROR("failed to bind network socket");
 		goto error;
 	}
 	if (listen(sock, LISTEN_BACKLOG) == -1) {
-		FATAL("failed to listen on network socket");
+		ERROR("failed to listen on network socket");
 		goto error;
 	}
 	return (sock);
@@ -150,7 +150,7 @@ static auto	closeMap(std::map<int,Server>&	fds) -> void {
 }
 
 #define MAX_EVENTS 10
-auto	mvpServer([[maybe_unused]] const std::vector<Server>& servers) -> int {
+auto	mvpServer(const std::vector<Server>& servers) -> int {
 	using namespace std::literals;
 	using fd = int;
 
@@ -160,15 +160,13 @@ auto	mvpServer([[maybe_unused]] const std::vector<Server>& servers) -> int {
 	std::map<fd,Server>	listeners;
 	for (const Server& s : servers) {
 		const fd	sock = createSocket(s.port);
-		if (sock < 0) {
-			closeMap(listeners);
-			return (1);
-		}
+		if (sock < 0) continue ;
 		listeners[sock] = s;
 	}
-
-	/*const fd	listen_sock = createSocket(PORT);*/
-	/*if (listen_sock < 0) return (1);*/
+	if (listeners.empty()) {
+		FATAL("Failed to instantiate any listening sockets");
+		return (1); 
+	}
 
 	// set up epoll
 	struct epoll_event	events[MAX_EVENTS];
@@ -181,21 +179,21 @@ auto	mvpServer([[maybe_unused]] const std::vector<Server>& servers) -> int {
 
 	// add the listening sockets into epoll
 	struct epoll_event	ev;
-	for (std::pair<const int,Server> sock : listeners) {
-	ev.events = EPOLLIN;
-	ev.data.fd = sock.first;
-	if (epoll_ctl(pollfd, EPOLL_CTL_ADD, sock.first, &ev) < 0) {
-		FATAL("failed to add network socket into epoll instance");
-		close(pollfd);
-		closeMap(listeners);
-		return (1);
-		}
+	for (std::pair<const fd,Server> sock : listeners) {
+		ev.events = EPOLLIN;
+		ev.data.fd = sock.first;
+		if (epoll_ctl(pollfd, EPOLL_CTL_ADD, sock.first, &ev) < 0) {
+			FATAL("failed to add network socket into epoll instance");
+			close(pollfd);
+			closeMap(listeners);
+			return (1);
+			}
 	}
 
 	__sighandler_t	originalIntHandler = signal(SIGINT, intHandler);
-	int total = 0; // total connections
-	std::map<int,std::string>	connection_data;
-	std::map<int,Server>		fdToConfig;
+	int message_count = 0;
+	std::map<fd,std::string>	connection_data;
+	std::map<fd,Server>		fdToConfig;
 	while (!stop || server_rv) {
 		int	nfds = epoll_wait(pollfd, events, MAX_EVENTS, 0);
 		for (int n = 0; n < nfds; n++) {
@@ -208,7 +206,7 @@ auto	mvpServer([[maybe_unused]] const std::vector<Server>& servers) -> int {
 				ev.events = EPOLLIN | EPOLLET;
 				ev.data.fd = connection_socket;
 				if (epoll_ctl(pollfd, EPOLL_CTL_ADD, connection_socket, &ev) < 0) {
-					INFO("failed to add incoming connection to epoll instance");
+					FATAL("failed to add incoming connection to epoll instance");
 					close(connection_socket);
 					server_rv = 1;
 					break ;
@@ -223,6 +221,7 @@ auto	mvpServer([[maybe_unused]] const std::vector<Server>& servers) -> int {
 					perror(strerror(errno));
 				if (rv == 0)
 					INFO("end of file found in incoming connection");
+				// should probably loop so we get the entire message because ET
 				current->events = EPOLLOUT | EPOLLET;
 				epoll_ctl(pollfd, EPOLL_CTL_MOD, current->data.fd, current);
 			} else { // new write event
@@ -230,7 +229,7 @@ auto	mvpServer([[maybe_unused]] const std::vector<Server>& servers) -> int {
 				if (readHTTPmessage(connection_data[current->data.fd])) ss << notFound;
 				else ss << badRequest;
 				send(current->data.fd, ss.str().c_str(), ss.str().length(), 0);
-				total++;
+				message_count++;
 				INFO("responded to connection on port " + std::to_string(fdToConfig[current->data.fd].port));
 				close(current->data.fd);
 				connection_data.erase(current->data.fd);
@@ -241,6 +240,6 @@ auto	mvpServer([[maybe_unused]] const std::vector<Server>& servers) -> int {
 	signal(SIGINT, originalIntHandler);
 	closeMap(listeners);
 	close(pollfd);
-	INFO(+ std::to_string(total) + " messages processed"s); // text replacement hell
+	INFO(+ std::to_string(message_count) + " messages processed"s); // text replacement hell
 	return (server_rv);
 }
