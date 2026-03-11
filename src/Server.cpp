@@ -27,6 +27,8 @@
 
 #include <Server.hpp>
 
+#include <iostream>
+#include <string>
 #include <vector>
 #include <charconv>
 #include <cstring>
@@ -44,6 +46,7 @@
 #include <netinet/ip.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <dirent.h>
 
 #include <debug.hpp>
 #include <HTTPMessage.hpp>
@@ -60,7 +63,7 @@ static auto	to_int(const std::string& s) noexcept -> std::optional<int> {
 const HTTPMessage	notFound("HTTP/1.1 404 Not found");
 const HTTPMessage	badRequest("HTTP/1.1 400 Bad request");
 
-auto	fulfillRequestTarget(const std::string& target) -> HTTPMessage {
+auto	fulfillRequestTarget(const std::string& request, const std::string& target) -> HTTPMessage {
 	struct stat statbuf;
 
 	if (access(target.data(), R_OK)) {
@@ -72,7 +75,20 @@ auto	fulfillRequestTarget(const std::string& target) -> HTTPMessage {
 	} else switch (statbuf.st_mode & S_IFMT) {
 		case (S_IFDIR): {
 			INFO("request target is a directory");
-			return HTTPMessage("HTTP/1.1 501 Not implemented");
+			DIR* dir = opendir(target.data());
+			if (!dir) {
+				WARN("could not open requested directory");
+				return HTTPMessage("HTTP/1.1 500 Internal server error");
+			}
+			struct dirent	*dirent;
+			std::stringstream	ss;
+			ss << "<!DOCTYPE html>\n<html>\n";
+			for (ss << "<title>Directory Listing</title>\n<body>\n\t<h1>Directory Listing</h1>\n\t<ul>\n"; (dirent = readdir(dir));) {
+				ss << "\t\t<li><a href=\"" + request + dirent->d_name + "\">" << dirent->d_name << "</a></li>\n";
+			}
+			ss << "\t</ul>\n<body>\n</html>\n";
+			closedir(dir);
+			return HTTPMessage("HTTP/1.1 200 OK", {"content-length:" + std::to_string(ss.str().length())}, ss.str());
 		};
 		case (S_IFREG): {
 			INFO("request target is a regular file");
@@ -99,6 +115,7 @@ auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct 
 	std::optional<std::string>	target = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
 			return HTTPparsing::originForm(std::get<HTTPMessage::RequestData>(m.getData()).requestTarget).transform([](auto p) -> std::string { return p.second;});;
 			}).transform([self](std::string s) -> std::string {
+				// parsing prevents path traversal vulnerabilities (somehow)
 				if (self.root.ends_with('/')) {
 					return self.root + HTTPparsing::absolutePath(s)->second.substr(1); // cannot fail
 				} else {
@@ -107,11 +124,11 @@ auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct 
 			});
 	if (http // is the http valid?
 		&& target // is there a valid target?
-		) ss << fulfillRequestTarget(*target);
+		) ss << fulfillRequestTarget(std::get<HTTPMessage::RequestData>(http->getData()).requestTarget, *target);
 	else ss << badRequest;
 	send(ev->data.fd, ss.str().c_str(), ss.str().length(), 0);
 	INFO("responded to connection on port " + std::to_string(self.port));
-	INFO("request target: " + *target);
+	if (target) INFO("request target: " + *target);
 	close(ev->data.fd);
 	self.client_data.erase(ev->data.fd);
 	return (true);

@@ -11,8 +11,8 @@ DEPFLAGS		=	-MM -MF $@ -MT $@ -MT $(BINDIR)$(addsuffix .o,$(notdir $(basename $<
 INC				=	-I$(INCDIR)
 INCDIR			:=	inc/
 VPATH			=	$(SRCDIR)
-CXXFLAGS		?=	-Wall -Wextra -Werror -pedantic
-CPPFLAGS		=	$(INC) -std=gnu++2b
+CXXFLAGS		?=	-Wall -Wextra -Werror -pedantic -fsanitize=address
+CPPFLAGS		=	$(INC) -std=gnu++2b 
 LDFLAGS			:=
 CXX				:=	c++
 RM				:=	rm -fr
