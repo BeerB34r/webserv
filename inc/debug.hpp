@@ -37,9 +37,9 @@ namespace debug {
 	auto _log(const std::string&, bool bypass = false) -> void;
 } // namespace debug
 # define DEBUG(x) debug::p(x)
-# define INFO(x) DEBUG(BOLD CYAN "[INFO]" RESET " " x)
-# define WARN(x) DEBUG(BOLD YELLOW "[WARN]" RESET " " x)
-# define ERROR(x) DEBUG(BOLD RED "[ERROR]" RESET " " x)
-# define FATAL(x) debug::p(BOLD RED "[FATAL]" RESET " " x, true)
+# define INFO(x) DEBUG(BOL BOLD CYAN "[INFO]" RESET " " x)
+# define WARN(x) DEBUG(BOL BOLD YELLOW "[WARN]" RESET " " x)
+# define ERROR(x) DEBUG(BOL BOLD RED "[ERROR]" RESET " " x)
+# define FATAL(x) debug::p(BOL BOLD RED "[FATAL]" RESET " " x, true)
 
 #endif // DEBUG_HPP

@@ -179,7 +179,6 @@ static auto	closeMap(std::map<int,Server>&	fds) -> void {
 	for (auto fd : fds) close(fd.first);
 }
 
-#include <ranges>
 #define MAX_EVENTS 10
 auto	mvpServer(const std::vector<Server>& servers) -> int {
 	using namespace std::literals;
@@ -223,7 +222,7 @@ auto	mvpServer(const std::vector<Server>& servers) -> int {
 
 	__sighandler_t	originalIntHandler = signal(SIGINT, intHandler);
 	int message_count = 0;
-	std::map<fd,Server>		fdToConfig;
+	std::map<fd,Server>		sockToServer;
 	while (!stop || server_rv) {
 		int	nfds = epoll_wait(pollfd, events, MAX_EVENTS, 0);
 		for (int n = 0; n < nfds; n++) {
@@ -240,20 +239,20 @@ auto	mvpServer(const std::vector<Server>& servers) -> int {
 					server_rv = 1;
 					break ;
 				}
-				fdToConfig[connection_socket] = listeners[current->data.fd];
+				sockToServer[connection_socket] = listeners[current->data.fd];
 			} else  { // new client event
-				Server&	serverConfig = fdToConfig[current->data.fd];
+				Server&	serverConfig = sockToServer[current->data.fd];
 				if (current->events & EPOLLIN
 					? message_count++, serverConfig.readEventHandler(serverConfig, pollfd, current)
 					: serverConfig.writeEventHandler(serverConfig, pollfd, current)
 					) // can we pretend that airplanes in the night sky are like shooting stars
-					fdToConfig.erase(current->data.fd);
+					sockToServer.erase(current->data.fd);
 			}
 		}
 	}
 	signal(SIGINT, originalIntHandler);
 	closeMap(listeners);
 	close(pollfd);
-	INFO(+ std::to_string(message_count) + " messages processed"s); // text replacement hell
+	INFO(+ std::to_string(message_count) + " messages processed");
 	return (server_rv);
 }

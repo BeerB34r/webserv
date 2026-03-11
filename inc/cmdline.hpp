@@ -47,6 +47,7 @@
 #define CYAN			CSI "36m"
 #define WHITE			CSI "37m"
 #define DEFAULT			CSI "39m"
+#define BOL				CSI "E"
 
 auto	cmdlineArgs(int& ac, char**& av) -> int;
 
