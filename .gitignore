@@ -6,5 +6,6 @@
 !*.tpp
 !*.hs
 !*.mk
+!*.md
 !example/*
 !makefile
