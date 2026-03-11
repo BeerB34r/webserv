@@ -33,7 +33,7 @@
 namespace debug {
 	auto	p(const std::string& s, bool bypass) -> void {
 		if (bypass || global::verbose) _print(s, bypass);
-		if (bypass || global::log) _log(s, bypass);
+		if (bypass || global::log) _log(s);
 	}
 
 	auto	_print(const std::string& s, bool bypass) -> void {

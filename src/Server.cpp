@@ -183,7 +183,6 @@ static auto	closeMap(std::map<int,Server>&	fds) -> void {
 auto	mvpServer(const std::vector<Server>& servers) -> int {
 	using namespace std::literals;
 	using fd = int;
-
 	int	server_rv = 0;
 
 	// set up network sockets
@@ -195,12 +194,12 @@ auto	mvpServer(const std::vector<Server>& servers) -> int {
 	}
 	if (listeners.empty()) {
 		FATAL("Failed to instantiate any listening sockets");
-		return (1); 
+		return (1); // cuz you only need the light when its burnin low
 	}
 
 	// set up epoll
 	struct epoll_event	events[MAX_EVENTS];
-	const fd	pollfd = epoll_create1(0);
+	const fd	pollfd = epoll_create1(0); // passenger riff
 	if (pollfd < 0) {
 		FATAL("failed to create epoll instance");
 		closeMap(listeners);
@@ -214,10 +213,10 @@ auto	mvpServer(const std::vector<Server>& servers) -> int {
 		ev.data.fd = sock.first;
 		if (epoll_ctl(pollfd, EPOLL_CTL_ADD, sock.first, &ev) < 0) {
 			FATAL("failed to add network socket into epoll instance");
-			close(pollfd);
+			close(pollfd); // only miss the sun when it starts to snow
 			closeMap(listeners);
 			return (1);
-			}
+		}
 	}
 
 	__sighandler_t	originalIntHandler = signal(SIGINT, intHandler);
@@ -227,26 +226,27 @@ auto	mvpServer(const std::vector<Server>& servers) -> int {
 		int	nfds = epoll_wait(pollfd, events, MAX_EVENTS, 0);
 		for (int n = 0; n < nfds; n++) {
 			struct epoll_event	*current = &events[n];
+			int	socket = current->data.fd;
 
-			if (listeners.contains(current->data.fd)) { // new connection
-				fd	connection_socket = getIncomingConnection(current->data.fd);
+			if (listeners.contains(socket)) { // new connection
+				fd	connection_socket = getIncomingConnection(socket);
 				if (connection_socket < 0) continue ;
 				ev.events = EPOLLIN | EPOLLET;
 				ev.data.fd = connection_socket;
 				if (epoll_ctl(pollfd, EPOLL_CTL_ADD, connection_socket, &ev) < 0) {
 					FATAL("failed to add incoming connection to epoll instance");
-					close(connection_socket);
+					close(connection_socket); // only know you love her when you let her go
 					server_rv = 1;
 					break ;
 				}
-				sockToServer[connection_socket] = listeners[current->data.fd];
+				sockToServer[connection_socket] = listeners[socket];
 			} else  { // new client event
-				Server&	serverConfig = sockToServer[current->data.fd];
+				Server&	serverConfig = sockToServer[socket];
 				if (current->events & EPOLLIN
 					? message_count++, serverConfig.readEventHandler(serverConfig, pollfd, current)
 					: serverConfig.writeEventHandler(serverConfig, pollfd, current)
 					) // can we pretend that airplanes in the night sky are like shooting stars
-					sockToServer.erase(current->data.fd);
+					sockToServer.erase(socket);
 			}
 		}
 	}
