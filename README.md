@@ -27,7 +27,7 @@ haskell shebang:
 - should be trivial, but all of it
 ### config
 - interface spec => done
-- default error pages
+- default error pages => not resolved on per-server basis
 - max allowed request body
 - accepted methods
 - file extension cgi
