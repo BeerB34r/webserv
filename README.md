@@ -26,12 +26,14 @@ haskell shebang:
 ### multiple cgi types
 - should be trivial, but all of it
 ### config
+#### done
 - interface spec => done
 - default error pages => resolved on per-server basis, configured in special block
+- default file when directory => index key
+- enable/disable directory listing => autoindex key
+#### TODO
 - max allowed request body
 - accepted methods
 - file extension cgi
-- default file when directory
-- enable/disable directory listing
 - upload file permission + storage location
 

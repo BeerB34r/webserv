@@ -61,6 +61,35 @@ static auto	to_int(const std::string& s) noexcept -> std::optional<int> {
 	else return std::nullopt;
 }
 
+static auto	autoIndex(Server& self, const std::string& request, const std::string& dirPath) -> HTTPMessage {
+	// [TODO]: maybe, prevent path traversal attacks
+	DIR* dir = opendir(dirPath.data());
+	if (!dir) {
+		WARN("could not open requested directory");
+		return self.statusPages.at(500);
+	}
+	struct dirent	*dirent;
+	std::stringstream	ss;
+	ss << "<!DOCTYPE html>\n<html>\n";
+	for (ss << "<title>Directory Listing</title>\n<body>\n\t<h1>Directory Listing</h1>\n\t<ul>\n"; (dirent = readdir(dir));) {
+		std::string	name = dirent->d_name;
+		switch (dirent->d_type) {
+			case (DT_DIR): {
+				name += '/';
+				break ;
+			} case (DT_REG): {
+				break ;
+			} default: {
+				break ;
+			}
+		}
+		ss << "\t\t<li><a href=\"" + (request.ends_with('/') ? request : request + '/') + name + "\">" << name << "</a></li>\n";
+	}
+	ss << "\t</ul>\n<body>\n</html>\n";
+	closedir(dir);
+	return HTTPMessage("HTTP/1.1 200 OK", {"content-length:" + std::to_string(ss.str().length())}, ss.str());
+}
+
 auto	fulfillRequestTarget(Server& self, const std::string& request, const std::string& target) -> HTTPMessage {
 	struct stat statbuf;
 
@@ -72,21 +101,15 @@ auto	fulfillRequestTarget(Server& self, const std::string& request, const std::s
 		return self.statusPages.at(403);
 	} else switch (statbuf.st_mode & S_IFMT) {
 		case (S_IFDIR): {
-			// [TODO]: maybe, prevent path traversal attacks
-			DIR* dir = opendir(target.data());
-			if (!dir) {
-				WARN("could not open requested directory");
-				return self.statusPages.at(500);
+			if (self.values.contains("index")
+				&& !self.values.at("index").empty()
+				&& (request == "/" || !request.ends_with('/'))
+				) {
+				INFO("index: " + self.values.at("index") + ", appended path: " + target + "/" + self.values.at("index"));
+				return fulfillRequestTarget(self, request, target + "/" + self.values.at("index"));
 			}
-			struct dirent	*dirent;
-			std::stringstream	ss;
-			ss << "<!DOCTYPE html>\n<html>\n";
-			for (ss << "<title>Directory Listing</title>\n<body>\n\t<h1>Directory Listing</h1>\n\t<ul>\n"; (dirent = readdir(dir));) {
-				ss << "\t\t<li><a href=\"" + (request.ends_with('/') ? request : request + '/') + dirent->d_name + "\">" << dirent->d_name << "</a></li>\n";
-			}
-			ss << "\t</ul>\n<body>\n</html>\n";
-			closedir(dir);
-			return HTTPMessage("HTTP/1.1 200 OK", {"content-length:" + std::to_string(ss.str().length())}, ss.str());
+			if (self.values.contains("autoindex")) return autoIndex(self, request, target);
+			else return self.statusPages.at(403);
 		};
 		case (S_IFREG): {
 			std::ifstream	file(target);
