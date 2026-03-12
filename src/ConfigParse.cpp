@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/03/04 17:06:05 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/03/04 19:53:21 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/03/12 20:18:29 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -27,7 +27,6 @@
 
 #include <Parser.hpp>
 #include <Config.hpp>
-#include <iostream>
 #include <variant>
 
 namespace ConfigParse {
@@ -47,6 +46,7 @@ namespace ConfigParse {
 		for (char& c : low) c = tolower(c);
 		if (low == "server") return Config::SERVER;
 		if (low == "http") return Config::HTTP;
+		if (low == "error") return Config::ERROR;
 		return Config::UNKNOWN;
 	};
 	static Fn<String(std::vector<String>)>	concat = [](std::vector<String> v) noexcept -> String {

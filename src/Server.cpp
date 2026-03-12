@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/03/10 19:57:48 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/03/12 19:27:10 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/03/12 21:11:31 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -61,25 +61,22 @@ static auto	to_int(const std::string& s) noexcept -> std::optional<int> {
 	else return std::nullopt;
 }
 
-auto	fulfillRequestTarget(const std::string& request, const std::string& target) -> HTTPMessage {
+auto	fulfillRequestTarget(Server& self, const std::string& request, const std::string& target) -> HTTPMessage {
 	struct stat statbuf;
 
 	if (access(target.data(), F_OK)) {
-		WARN("could not access requestTarget");
-		return defaultpage::codePages.at(404);
+		return self.statusPages.at(404);
 	} else if (access(target.data(), R_OK)) {
-		WARN("could not read requestTarget");
-		return defaultpage::codePages.at(403);
+		return self.statusPages.at(403);
 	} else if (stat(target.data(), &statbuf)) {
-		WARN("could not stat request target");
-		return defaultpage::codePages.at(403);
+		return self.statusPages.at(403);
 	} else switch (statbuf.st_mode & S_IFMT) {
 		case (S_IFDIR): {
 			// [TODO]: maybe, prevent path traversal attacks
 			DIR* dir = opendir(target.data());
 			if (!dir) {
 				WARN("could not open requested directory");
-				return defaultpage::codePages.at(500);
+				return self.statusPages.at(500);
 			}
 			struct dirent	*dirent;
 			std::stringstream	ss;
@@ -95,15 +92,14 @@ auto	fulfillRequestTarget(const std::string& request, const std::string& target)
 			std::ifstream	file(target);
 			if (!file.is_open()) {
 				WARN("could not open requested file");
-				return defaultpage::codePages.at(500);
+				return self.statusPages.at(500);
 			}
 			std::stringstream	ss;
 			ss << file.rdbuf();
 			return HTTPMessage("HTTP/1.1 200 OK", {"content-length:" + std::to_string(ss.str().length())}, ss.str());
 		}
 		default : {
-			WARN("request target is unsupported");
-			return defaultpage::codePages.at(403);
+			return self.statusPages.at(403);
 		}
 	}
 }
@@ -125,8 +121,8 @@ auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct 
 			});
 	if (http // is the http valid?
 		&& target // is there a valid target?
-		) ss << fulfillRequestTarget(std::get<HTTPMessage::RequestData>(http->getData()).requestTarget, *target);
-	else ss << defaultpage::codePages.at(400);
+		) ss << fulfillRequestTarget(self, std::get<HTTPMessage::RequestData>(http->getData()).requestTarget, *target);
+	else ss << self.statusPages.at(400);
 	send(ev->data.fd, ss.str().c_str(), ss.str().length(), 0);
 	self.client_data[ev->data.fd] = "";
 	if (should_close) {
@@ -172,44 +168,65 @@ static auto	ipv4ToLong(const std::string& s) noexcept -> long {
 	return rv;
 }
 
+static auto	readFile(const std::string& path) -> Maybe<std::string> {
+	std::ifstream	file(path);
+	if (!file.is_open()) return std::nullopt;
+	std::stringstream	ss;
+	ss << file.rdbuf();
+	return ss.str();
+}
+
+static auto	singleServerFromConfig(const Config& c) -> Maybe<Server> {
+	Server s;
+	s.blocks = c.blocks;
+	s.ident = c.ident;
+	s.values = c.values;
+	if (c.values.at("listen").contains(':')) {
+		std::string	prefix = s.values.at("listen").substr(0, s.values.at("listen").find(':'));
+		std::string	suffix = s.values.at("listen").substr(s.values.at("listen").find(':') + 1);
+		if (prefix == "localhost") prefix = "127.0.0.1";
+		s.address = ipv4ToLong(prefix);
+		s.port = *to_int(suffix);
+	} else { // any address
+		s.port = *to_int(c.values.at("listen"));
+	}
+	if (c.contains(Config::ERROR)) {
+		for (Config current : c.getBlocks(Config::ERROR)) for (std::pair<std::string,std::string> p : current.values) {
+			if (!to_int(p.first)) continue ;
+			int	code = *to_int(p.first);
+			Maybe<std::string>	page = readFile(p.second);
+			if (!page) {
+				WARN("could not read error page " + p.second);
+				return std::nullopt;
+			}
+			if (s.statusPages.contains(code)) {
+				s.statusPages.insert_or_assign(code, HTTPMessage(
+							s.statusPages.at(code).getStartline(),
+							{"content-length:" + std::to_string(page->size())},
+							*page
+				));
+			} else {
+				WARN("error code " + std::to_string(code) + " is not supported" );
+			}
+		}
+	}
+	s.root = c.values.at("root").substr(0, c.values.at("root").find(','));
+	s.writeEventHandler = defaultWriteEventHandler;
+	s.readEventHandler = defaultReadEventHandler;
+	return s;
+}
+
 auto	fromConfig(const Config& c) -> std::vector<Server> {
 	std::vector<Server>	rv;
 
 	if (!c.contains(Config::SERVER)) {
-		Server s;
-		s.blocks = c.blocks;
-		s.ident = c.ident;
-		s.values = c.values;
-		if (c.values.at("listen").contains(':')) {
-			std::optional<std::pair<std::string,std::string>>	ip = HTTPparsing::ipv4address(c.values.at("listen"));
-			if (!ip) return rv ; // holee IP bad
-			s.address = ipv4ToLong(ip->second);
-			s.port = *to_int(ip->first.substr(ip->first.find(':')));
-		} else { // any address
-			s.port = *to_int(c.values.at("listen"));
-		}
-		s.root = c.values.at("root").substr(0, c.values.at("root").find(','));
-		s.writeEventHandler = defaultWriteEventHandler;
-		s.readEventHandler = defaultReadEventHandler;
-		rv.push_back(s);
+		Maybe<Server> s = singleServerFromConfig(c);
+		if (s)
+			rv.push_back(*s);
 	} else for (Config& current : c.getBlocks(Config::SERVER)) {
-		Server s;
-		s.blocks = current.blocks;
-		s.ident = current.ident;
-		s.values = current.values;
-		if (current.values.at("listen").contains(':')) {
-			std::string	prefix = s.values.at("listen").substr(0, s.values.at("listen").find(':'));
-			std::string	suffix = s.values.at("listen").substr(s.values.at("listen").find(':') + 1);
-			if (prefix == "localhost") prefix = "127.0.0.1";
-			s.address = ipv4ToLong(prefix);
-			s.port = *to_int(suffix);
-		} else { // any address
-			s.port = *to_int(current.values.at("listen"));
-		}
-		s.root = current.values.at("root").substr(0, current.values.at("root").find(','));
-		s.writeEventHandler = defaultWriteEventHandler;
-		s.readEventHandler = defaultReadEventHandler;
-		rv.push_back(s);
+		Maybe<Server> s = singleServerFromConfig(current);
+		if (s)
+			rv.push_back(*s);
 	}
 	return rv;
 }

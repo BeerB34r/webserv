@@ -29,6 +29,8 @@
 # define SERVER_HPP
 
 #include <Config.hpp>
+#include <HTTPMessage.hpp>
+#include <defaultpage.hpp>
 #include <netinet/in.h>
 
 struct Server : public Config {
@@ -40,6 +42,7 @@ struct Server : public Config {
 	eventHandler	writeEventHandler;
 	auto	toLocal(const std::string&) -> std::string;
 	std::map<int,std::string>	client_data;
+	std::map<int,HTTPMessage>	statusPages = defaultpage::codePages;
 };
 
 auto	fromConfig(const Config&) -> std::vector<Server>;

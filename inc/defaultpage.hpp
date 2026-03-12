@@ -32,6 +32,8 @@
 #include <map>
 namespace defaultpage {
 	extern const std::map<int,HTTPMessage>	codePages;
+	extern const std::string	pageDefaultHeader;
+	extern const std::string	pageDefaultFooter;
 }
 
 #endif // DEFAULT_HPP

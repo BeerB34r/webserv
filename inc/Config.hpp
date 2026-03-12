@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/03/04 16:54:36 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/03/10 20:17:35 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/03/12 20:12:58 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -39,6 +39,7 @@ public:
 	enum Type {
 		TOP_LEVEL,
 		SERVER,
+		ERROR,
 		HTTP,
 		UNKNOWN
 	} type;

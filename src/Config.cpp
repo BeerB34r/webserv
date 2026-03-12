@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/03/04 19:53:29 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/03/10 20:10:40 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/03/12 20:16:33 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -40,7 +40,7 @@ auto	Config::empty(void) const noexcept -> bool {
 
 auto	Config::propogateToBlocks(void) noexcept -> bool {
 	for (Config& c : blocks) {
-		for (const std::pair<const std::string,std::string>&	p : values) {
+		if (c.type != Config::ERROR) for (const std::pair<const std::string,std::string>&	p : values) {
 			std::string	key;
 			std::string	val;
 			std::tie(key,val) = p;
@@ -61,6 +61,7 @@ auto	fromType(Config::Type t) noexcept -> const std::string {
 		case (Config::HTTP): return "Http";
 		case (Config::SERVER): return "Server";
 		case (Config::TOP_LEVEL): return "Config file";
+		case (Config::ERROR): return "Error";
 		default: return "";
 	}
 }
@@ -69,7 +70,7 @@ auto	Config::getBlocks(Config::Type t) const noexcept -> std::vector<Config> {
 	std::vector<Config>	rv;
 
 	for (const Config& c : blocks) {
-		if (c.type == SERVER) rv.push_back(c);
+		if (c.type == t) rv.push_back(c);
 		else for (const Config& server : c.getBlocks(t)) {
 			rv.push_back(server);
 		}
@@ -136,6 +137,24 @@ static auto	checkSingleServer(const Config& c) -> bool {
 	if (c.contains(Config::SERVER)) {
 		WARN("server cannot recurse");
 		rv = true;
+	}
+	if (c.contains(Config::ERROR)) {
+		std::set<int>	codes;
+		for (Config current : c.getBlocks(Config::ERROR)) for (std::pair<std::string,std::string> p : current.values) {
+			if (!to_int(p.first)) continue ;
+			int code = *to_int(p.first);
+			if (codes.contains(code)) {
+				WARN("server cannot have multiple error pages for the same status code");
+				rv = true;
+				break ;
+			}
+			if (p.second.contains(',')) {
+				WARN("server cannot have multiple files for individual status codes");
+				rv = true;
+				break ;
+			}
+			codes.insert(code);
+		}
 	}
 	return rv;
 }
