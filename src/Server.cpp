@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/03/10 19:57:48 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/03/10 20:19:09 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/03/12 19:27:10 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -51,6 +51,7 @@
 #include <debug.hpp>
 #include <HTTPMessage.hpp>
 #include <HTTPparsing.hpp>
+#include <defaultpage.hpp>
 
 static auto	to_int(const std::string& s) noexcept -> std::optional<int> {
 	int	rv{};
@@ -60,25 +61,25 @@ static auto	to_int(const std::string& s) noexcept -> std::optional<int> {
 	else return std::nullopt;
 }
 
-const HTTPMessage	notFound("HTTP/1.1 404 Not found");
-const HTTPMessage	badRequest("HTTP/1.1 400 Bad request");
-
 auto	fulfillRequestTarget(const std::string& request, const std::string& target) -> HTTPMessage {
 	struct stat statbuf;
 
-	if (access(target.data(), R_OK)) {
+	if (access(target.data(), F_OK)) {
 		WARN("could not access requestTarget");
-		return HTTPMessage("HTTP/1.1 403 Forbidden");
+		return defaultpage::codePages.at(404);
+	} else if (access(target.data(), R_OK)) {
+		WARN("could not read requestTarget");
+		return defaultpage::codePages.at(403);
 	} else if (stat(target.data(), &statbuf)) {
 		WARN("could not stat request target");
-		return HTTPMessage("HTTP/1.1 403 Forbidden");
+		return defaultpage::codePages.at(403);
 	} else switch (statbuf.st_mode & S_IFMT) {
 		case (S_IFDIR): {
 			// [TODO]: maybe, prevent path traversal attacks
 			DIR* dir = opendir(target.data());
 			if (!dir) {
 				WARN("could not open requested directory");
-				return HTTPMessage("HTTP/1.1 500 Internal server error");
+				return defaultpage::codePages.at(500);
 			}
 			struct dirent	*dirent;
 			std::stringstream	ss;
@@ -94,7 +95,7 @@ auto	fulfillRequestTarget(const std::string& request, const std::string& target)
 			std::ifstream	file(target);
 			if (!file.is_open()) {
 				WARN("could not open requested file");
-				return HTTPMessage("HTTP/1.1 500 Internal server error");
+				return defaultpage::codePages.at(500);
 			}
 			std::stringstream	ss;
 			ss << file.rdbuf();
@@ -102,7 +103,7 @@ auto	fulfillRequestTarget(const std::string& request, const std::string& target)
 		}
 		default : {
 			WARN("request target is unsupported");
-			return HTTPMessage("HTTP/1.1 403 Forbidden");
+			return defaultpage::codePages.at(403);
 		}
 	}
 }
@@ -125,7 +126,7 @@ auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct 
 	if (http // is the http valid?
 		&& target // is there a valid target?
 		) ss << fulfillRequestTarget(std::get<HTTPMessage::RequestData>(http->getData()).requestTarget, *target);
-	else ss << badRequest;
+	else ss << defaultpage::codePages.at(400);
 	send(ev->data.fd, ss.str().c_str(), ss.str().length(), 0);
 	self.client_data[ev->data.fd] = "";
 	if (should_close) {
