@@ -7,6 +7,8 @@ studies at [Codam]
 
 # Notes
 ## CGI related
+binary files are binary files and can be ran regardless of source language
+
 haskell files can be intepreted and ran directly as follows:
 ```sh
 ghc --run <filename> -- [parameters...]
