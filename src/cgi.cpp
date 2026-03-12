@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                            ::::::::        */
-/*   Server.hpp                                              :+:    :+:       */
+/*   cgi.cpp                                                 :+:    :+:       */
 /*                                                          +:+               */
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
-/*   Created: 2026/03/10 19:53:15 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/03/10 20:20:39 by mde-beer            ########   odam.nl   */
+/*   Created: 2026/03/12 22:11:37 by mde-beer            #+#    #+#           */
+/*   Updated: 2026/03/12 22:31:45 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -25,29 +25,23 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
-#ifndef SERVER_HPP
-# define SERVER_HPP
+#include <cgi.hpp>
+#include <unistd.h>
 
-#include <Config.hpp>
-#include <HTTPMessage.hpp>
-#include <defaultpage.hpp>
-#include <netinet/in.h>
+namespace cgi {
+	auto	run(Server& self, std::string& bin) -> HTTPMessage {
+		const pid_t	pid = fork();
+		char	*cmdline[] = {
+			bin.data(),
+			NULL
+		};
+		const char	*env[] = { NULL };
 
-struct Server : public Config {
-	using eventHandler = std::function<bool(Server&, int, struct epoll_event*)>;
-	short	port;
-	long	address = INADDR_ANY;
-	std::string	root;
-	eventHandler	readEventHandler;
-	eventHandler	writeEventHandler;
-	auto	toLocal(const std::string&) -> std::string;
-	std::map<int,std::string>	client_data;
-	std::map<int,HTTPMessage>	statusPages = defaultpage::codePages;
-	std::set<std::string>	cgiExts;
-};
-
-auto	fromConfig(const Config&) -> std::vector<Server>;
-
-auto	mvpServer(const std::vector<Server>&) -> int;
-
-#endif // SERVER_HPP
+		if (pid < 0)
+			return self.statusPages.at(500);
+		if (pid) { // parent
+		}
+		// child
+		execve(bin.data(), cmdline, env);
+	}
+}

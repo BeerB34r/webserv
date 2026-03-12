@@ -31,9 +31,10 @@ haskell shebang:
 - default error pages => resolved on per-server basis, configured in special block
 - default file when directory => index key
 - enable/disable directory listing => autoindex key
+#### WIP
+- file extension cgi
 #### TODO
 - max allowed request body
 - accepted methods
-- file extension cgi
 - upload file permission + storage location
 

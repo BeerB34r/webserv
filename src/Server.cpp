@@ -93,6 +93,12 @@ static auto	autoIndex(Server& self, const std::string& request, const std::strin
 auto	fulfillRequestTarget(Server& self, const std::string& request, const std::string& target) -> HTTPMessage {
 	struct stat statbuf;
 
+	for (const std::string& s : self.cgiExts) {
+		if (target.ends_with(s)) {
+			INFO("CGI requested: " + target);
+		}
+	}
+
 	if (access(target.data(), F_OK)) {
 		return self.statusPages.at(404);
 	} else if (access(target.data(), R_OK)) {
@@ -231,6 +237,16 @@ static auto	singleServerFromConfig(const Config& c) -> Maybe<Server> {
 			} else {
 				WARN("error code " + std::to_string(code) + " is not supported" );
 			}
+		}
+	}
+	if (c.values.contains("cgi")) {
+		std::string	cgis = c.values.at("cgi");
+		for (std::string cgi = cgis.substr(0, cgis.find(',')); !cgi.empty(); ) {
+			s.cgiExts.insert(cgi);
+			if (!cgis.contains(','))
+				break ;
+			cgis.erase(0, cgis.find(',') + 1);
+			cgi = cgis.substr(0, cgis.find(','));
 		}
 	}
 	s.root = c.values.at("root").substr(0, c.values.at("root").find(','));
