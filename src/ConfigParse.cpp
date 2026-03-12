@@ -38,7 +38,7 @@ namespace ConfigParse {
 	using Fn = std::function<T>;
 
 	const Parser<char>	tchar
-			= parseAnyOf({'/', '!', '#', '$', '%', '&', '\\', '*', '+', '-', '.', '^', '_', '`', '|', '~'})
+			= parseAnyOf({':', '/', '!', '#', '$', '%', '&', '\\', '*', '+', '-', '.', '^', '_', '`', '|', '~'})
 			| parsePredicate(isdigit)
 			| parsePredicate(isalpha);
 

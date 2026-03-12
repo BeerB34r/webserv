@@ -26,7 +26,7 @@ haskell shebang:
 ### multiple cgi types
 - should be trivial, but all of it
 ### config
-- interface spec
+- interface spec => done
 - default error pages
 - max allowed request body
 - accepted methods

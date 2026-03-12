@@ -25,12 +25,14 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
+#include "HTTPparsing.hpp"
 #include <Config.hpp>
 #include <charconv>
 #include <debug.hpp>
 #include <fstream>
 #include <set>
 #include <sstream>
+#include <utility>
 
 auto	Config::empty(void) const noexcept -> bool {
 	return (blocks.empty() && values.empty());
@@ -109,13 +111,23 @@ static auto	checkSingleServer(const Config& c) -> bool {
 		WARN("server lacks \"listen\" key");
 		rv = true;
 	}
-	if (!to_int(c.values.at("listen"))) {
-		WARN("\"" + c.values.at("listen") + "\" does not evaluate to an integer");
-		rv = true;
-	}
-	if (to_int(c.values.at("listen")) < 1) {
-		WARN("Ports must be non-zero positive integers");
-		rv = true;
+	if (!c.values.at("listen").contains(':')) { // just port
+		if (to_int(c.values.at("listen")) < 1) {
+			WARN("ports must be non-zero positive integers");
+			rv = true;
+		}
+	} else { // ip:port
+		Maybe<std::pair<std::string,std::string>>	ip = HTTPparsing::ipv4address(c.values.at("listen"));
+		if (!ip && c.values.at("listen").substr(0, c.values.at("listen").find(':')) != "localhost") {
+			WARN("listening address is not valid");
+			rv = true;
+		}
+		if (ip) {
+			if ((Parse::parseChar(':') > HTTPparsing::port)(ip->second)) {
+				WARN("address cannot be provided without associated port");
+				rv = true;
+			}
+		}
 	}
 	if (!c.values.contains("root")) {
 		WARN("server lacks \"root\" key");
@@ -125,6 +137,18 @@ static auto	checkSingleServer(const Config& c) -> bool {
 		WARN("server cannot recurse");
 		rv = true;
 	}
+	return rv;
+}
+
+static auto	ipv4ToLong(const std::string& s) noexcept -> long {
+	std::string	addr = (s == "localhost") ? "127.0.0.1" : s;
+	long	rv;
+	long	firstOctet = *to_int(addr);
+	long	secondOctet = *to_int(addr.substr(addr.find('.')));
+	long	thirdOctet = *to_int(addr.substr(addr.find('.', addr.find('.') + 1)));
+	long	fourthOctet = *to_int(addr.substr(addr.find('.', addr.find('.', addr.find('.') + 1) + 1)));
+
+	rv = (firstOctet << (8 * 3)) + (secondOctet << (8 * 2)) + (thirdOctet << (8 * 1)) + (fourthOctet << (8 * 0));
 	return rv;
 }
 
@@ -143,16 +167,31 @@ auto	isInvalid(const Config& c) noexcept -> bool {
 			return checkSingleServer(servers[0]);
 		}
 		else {
-			std::set<int>	ports;
+			std::set<int>					ports;
+			std::set<std::pair<long,int>>	fullAddresses;
 			for (const Config& s : servers) {
 				INFO("checking server config \"" + (s.ident.empty() ? "N/A" : s.ident) + "\"...");
 				if (checkSingleServer(s)) return true;
-				int	port = to_int(s.values.at("listen")).value();
-				if (ports.contains(port)) {
-					WARN("port '" + s.values.at("listen") + "' reserved by different server");
-					return true;
+				int port;
+				if (!s.values.at("listen").contains(':')) {
+					port = to_int(s.values.at("listen")).value();
+					if (ports.contains(port)) {
+						WARN("port '" + s.values.at("listen") + "' reserved by different server");
+						return true;
+					}
+					ports.insert(port);
+				} else {
+					std::string	prefix = s.values.at("listen").substr(0, s.values.at("listen").find(':'));
+					std::string	suffix = s.values.at("listen").substr(s.values.at("listen").find(':') + 1);
+					if (prefix == "localhost") prefix = "127.0.0.1";
+					long addr = ipv4ToLong(HTTPparsing::ipv4address(prefix)->second);
+					port = to_int(suffix).value();
+					if (fullAddresses.contains(std::make_pair(addr, port))) {
+						WARN("network address '" + s.values.at("listen") + "' reserved by different server");
+						return true;
+					}
+					fullAddresses.insert(std::make_pair(addr, port));
 				}
-				ports.insert(port);
 			}
 		}
 	}

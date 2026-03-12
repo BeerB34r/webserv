@@ -159,6 +159,18 @@ auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev) -
 	return (false);
 }
 
+static auto	ipv4ToLong(const std::string& s) noexcept -> long {
+	std::string	addr = (s == "localhost") ? "127.0.0.1" : s;
+	long	rv;
+	long	firstOctet = *to_int(addr);
+	long	secondOctet = *to_int(addr.substr(addr.find('.') + 1));
+	long	thirdOctet = *to_int(addr.substr(addr.find('.', addr.find('.') + 1) + 1));
+	long	fourthOctet = *to_int(addr.substr(addr.find('.', addr.find('.', addr.find('.') + 1) + 1) + 1));
+
+	rv = (firstOctet << (8 * 3)) + (secondOctet << (8 * 2)) + (thirdOctet << (8 * 1)) + (fourthOctet << (8 * 0));
+	return rv;
+}
+
 auto	fromConfig(const Config& c) -> std::vector<Server> {
 	std::vector<Server>	rv;
 
@@ -167,8 +179,14 @@ auto	fromConfig(const Config& c) -> std::vector<Server> {
 		s.blocks = c.blocks;
 		s.ident = c.ident;
 		s.values = c.values;
-		s.port = *to_int(c.values.at("listen"));
-		INFO("root: " + c.values.at("root"));
+		if (c.values.at("listen").contains(':')) {
+			std::optional<std::pair<std::string,std::string>>	ip = HTTPparsing::ipv4address(c.values.at("listen"));
+			if (!ip) return rv ; // holee IP bad
+			s.address = ipv4ToLong(ip->second);
+			s.port = *to_int(ip->first.substr(ip->first.find(':')));
+		} else { // any address
+			s.port = *to_int(c.values.at("listen"));
+		}
 		s.root = c.values.at("root").substr(0, c.values.at("root").find(','));
 		s.writeEventHandler = defaultWriteEventHandler;
 		s.readEventHandler = defaultReadEventHandler;
@@ -178,8 +196,15 @@ auto	fromConfig(const Config& c) -> std::vector<Server> {
 		s.blocks = current.blocks;
 		s.ident = current.ident;
 		s.values = current.values;
-		s.port = *to_int(current.values.at("listen"));
-		INFO("root: " + current.values.at("root"));
+		if (current.values.at("listen").contains(':')) {
+			std::string	prefix = s.values.at("listen").substr(0, s.values.at("listen").find(':'));
+			std::string	suffix = s.values.at("listen").substr(s.values.at("listen").find(':') + 1);
+			if (prefix == "localhost") prefix = "127.0.0.1";
+			s.address = ipv4ToLong(prefix);
+			s.port = *to_int(suffix);
+		} else { // any address
+			s.port = *to_int(current.values.at("listen"));
+		}
 		s.root = current.values.at("root").substr(0, current.values.at("root").find(','));
 		s.writeEventHandler = defaultWriteEventHandler;
 		s.readEventHandler = defaultReadEventHandler;
@@ -192,7 +217,7 @@ auto	fromConfig(const Config& c) -> std::vector<Server> {
 #define LISTEN_BACKLOG 50
 
 // returns negative value on error
-auto	createSocket(short port) -> int {
+auto	createSocket(short port, long address = INADDR_ANY) -> int {
 	int	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (sock < 0) {
 		ERROR("failed to create network socket");
@@ -202,7 +227,7 @@ auto	createSocket(short port) -> int {
 	struct sockaddr_in	addr = {};
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
-	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_addr.s_addr = htonl(address);
 	int	reuse = 1;
 	// allow reuse of address and port
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
@@ -223,7 +248,13 @@ auto	createSocket(short port) -> int {
 	}
 
 	if (bind(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr))) {
-		ERROR("failed to bind network socket");
+		ERROR("failed to bind network socket at "
+				+ std::to_string(address >> (8 * 3)) + "."
+				+ std::to_string(address >> (8 * 2) & 0xFF) + "."
+				+ std::to_string(address >> (8 * 1) & 0xFF) + "."
+				+ std::to_string(address & 0xFF) + ":"
+				+ std::to_string(port)
+		);
 		goto error;
 	}
 	if (listen(sock, LISTEN_BACKLOG) == -1) {
@@ -266,8 +297,9 @@ auto	mvpServer(const std::vector<Server>& servers) -> int {
 
 	// set up network sockets
 	std::map<fd,Server>	listeners;
+	INFO("server count: " + std::to_string(servers.size()));
 	for (const Server& s : servers) {
-		const fd	sock = createSocket(s.port);
+		const fd	sock = createSocket(s.port, s.address);
 		if (sock < 0) continue ;
 		listeners[sock] = s;
 	}
@@ -275,6 +307,8 @@ auto	mvpServer(const std::vector<Server>& servers) -> int {
 		FATAL("Failed to instantiate any listening sockets");
 		return (1); // cuz you only need the light when its burnin low
 	}
+
+	INFO("listener count: " + std::to_string(listeners.size()));
 
 	// set up epoll
 	struct epoll_event	events[MAX_EVENTS];

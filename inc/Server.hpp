@@ -29,10 +29,12 @@
 # define SERVER_HPP
 
 #include <Config.hpp>
+#include <netinet/in.h>
 
 struct Server : public Config {
 	using eventHandler = std::function<bool(Server&, int, struct epoll_event*)>;
 	short	port;
+	long	address = INADDR_ANY;
 	std::string	root;
 	eventHandler	readEventHandler;
 	eventHandler	writeEventHandler;
