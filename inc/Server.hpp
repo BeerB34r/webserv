@@ -44,6 +44,7 @@ struct Server : public Config {
 	std::map<int,std::string>	client_data;
 	std::map<int,HTTPMessage>	statusPages = defaultpage::codePages;
 	std::set<std::string>	cgiExts;
+	std::set<HTTPMessage::HTTPMethod>	supportedMethods;
 };
 
 auto	fromConfig(const Config&) -> std::vector<Server>;

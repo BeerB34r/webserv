@@ -30,10 +30,12 @@
 
 #include <HTTPMessage.hpp>
 #include <map>
+
 namespace defaultpage {
 	extern const std::map<int,HTTPMessage>	codePages;
 	extern const std::string	pageDefaultHeader;
 	extern const std::string	pageDefaultFooter;
+	auto	create200(const std::string& s) -> HTTPMessage;
 }
 
 #endif // DEFAULT_HPP

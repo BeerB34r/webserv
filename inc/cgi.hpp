@@ -33,7 +33,7 @@
 #include <string>
 
 namespace cgi {
-	auto	run(Server& self, const std::string&) -> HTTPMessage;
+	auto	run(Server& self, HTTPMessage http, const std::string&) -> HTTPMessage;
 }
 
 #endif // CGI_HPP

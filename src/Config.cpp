@@ -25,11 +25,13 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
-#include "HTTPparsing.hpp"
+#include <HTTPMessage.hpp>
+#include <HTTPparsing.hpp>
 #include <Config.hpp>
 #include <charconv>
 #include <debug.hpp>
 #include <fstream>
+#include <iostream>
 #include <set>
 #include <sstream>
 #include <utility>
@@ -106,6 +108,7 @@ static auto	to_int(const std::string& s) noexcept -> std::optional<int> {
 	else return std::nullopt;
 }
 
+#include <ranges>
 static auto	checkSingleServer(const Config& c) -> bool {
 	bool	rv = false;
 	if (!c.values.contains("listen")) {
@@ -154,6 +157,21 @@ static auto	checkSingleServer(const Config& c) -> bool {
 				break ;
 			}
 			codes.insert(code);
+		}
+	}
+	if (c.values.contains("allowedmethods")) {
+		std::string	methodcsv = c.values.at("allowedmethods");
+		methodcsv.append(",");
+		std::vector<HTTPMessage::HTTPMethod>	methods;
+		do {
+			methods.push_back(toHTTPMethod(methodcsv.substr(0, methodcsv.find(','))));
+			methodcsv = methodcsv.substr(methodcsv.find(',') + 1);
+		} while (methodcsv.size());
+		for (HTTPMessage::HTTPMethod m : methods) {
+			if (!HTTPMessage::supportedRequestMethods.contains(m)) {
+				WARN("unsupported method in config file");
+				rv = true;
+			}
 		}
 	}
 	return rv;

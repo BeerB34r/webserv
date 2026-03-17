@@ -53,7 +53,7 @@
 #include <HTTPparsing.hpp>
 #include <defaultpage.hpp>
 
-static auto	to_int(const std::string& s) noexcept -> std::optional<int> {
+static inline auto	to_int(const std::string& s) noexcept -> std::optional<int> {
 	int	rv{};
 	if (std::from_chars(s.data(), s.data() + s.size(), rv).ec == std::errc{}) {
 		return rv;
@@ -71,7 +71,7 @@ static auto	autoIndex(Server& self, const std::string& request, const std::strin
 	struct dirent	*dirent;
 	std::stringstream	ss;
 	ss << "<!DOCTYPE html>\n<html>\n";
-	for (ss << "<title>Directory Listing</title>\n<body>\n\t<h1>Directory Listing</h1>\n\t<ul>\n"; (dirent = readdir(dir));) {
+	for (ss << "\t<title>Directory Listing</title>\n\t<body>\n\t\t<h1>Directory Listing</h1>\n\t\t<ul>\n"; (dirent = readdir(dir));) {
 		std::string	name = dirent->d_name;
 		switch (dirent->d_type) {
 			case (DT_DIR): {
@@ -83,19 +83,36 @@ static auto	autoIndex(Server& self, const std::string& request, const std::strin
 				break ;
 			}
 		}
-		ss << "\t\t<li><a href=\"" + (request.ends_with('/') ? request : request + '/') + name + "\">" << name << "</a></li>\n";
+		ss << "\t\t\t<li><a href=\"" + (request.ends_with('/') ? request : request + '/') + name + "\">" << name << "</a></li>\n";
 	}
-	ss << "\t</ul>\n<body>\n</html>\n";
+	ss << "\t\t</ul>\n\t<body>\n</html>\n";
 	closedir(dir);
-	return HTTPMessage("HTTP/1.1 200 OK", {"content-length:" + std::to_string(ss.str().length())}, ss.str());
+	return defaultpage::create200(ss.str());
 }
 
-auto	fulfillRequestTarget(Server& self, const std::string& request, const std::string& target) -> HTTPMessage {
+#include <cgi.hpp>
+
+static inline auto	isCGI(const std::string& target, const Server& self) -> bool {
+	for (const std::string& s : self.cgiExts) if (target.ends_with(s)) return true;
+	if (target.contains("/cgi-bin/")) return true;
+	return false;
+}
+
+auto	fulfillRequestTarget(Server& self, HTTPMessage http, const std::string& request, const std::string& target) -> HTTPMessage {
 	struct stat statbuf;
 
-	for (const std::string& s : self.cgiExts) {
-		if (target.ends_with(s)) {
-			INFO("CGI requested: " + target);
+	if (!self.supportedMethods.contains(std::get<HTTPMessage::RequestData>(http.getData()).method)) {
+		return self.statusPages.at(405);
+	}
+
+	// file extension based CGI
+	if (isCGI(target, self)) {
+		if (access(target.data(), F_OK)) {
+			return self.statusPages.at(404);
+		} else if (access(target.data(), X_OK)) {
+			return self.statusPages.at(403);
+		} else {
+			return cgi::run(self, http, target);
 		}
 	}
 
@@ -112,7 +129,7 @@ auto	fulfillRequestTarget(Server& self, const std::string& request, const std::s
 				&& (request == "/" || !request.ends_with('/'))
 				) {
 				INFO("index: " + self.values.at("index") + ", appended path: " + target + "/" + self.values.at("index"));
-				return fulfillRequestTarget(self, request, target + "/" + self.values.at("index"));
+				return fulfillRequestTarget(self, http, request, target + "/" + self.values.at("index"));
 			}
 			if (self.values.contains("autoindex")) return autoIndex(self, request, target);
 			else return self.statusPages.at(403);
@@ -125,7 +142,7 @@ auto	fulfillRequestTarget(Server& self, const std::string& request, const std::s
 			}
 			std::stringstream	ss;
 			ss << file.rdbuf();
-			return HTTPMessage("HTTP/1.1 200 OK", {"content-length:" + std::to_string(ss.str().length())}, ss.str());
+			return defaultpage::create200(ss.str());
 		}
 		default : {
 			return self.statusPages.at(403);
@@ -135,7 +152,7 @@ auto	fulfillRequestTarget(Server& self, const std::string& request, const std::s
 
 #define BUFFER_SIZE 1024
 auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct epoll_event* ev) -> bool {
-	bool	should_close = true;
+	bool	should_close = false;
 	std::stringstream	ss;
 	std::optional<HTTPMessage>	http = readHTTPrequest(self.client_data[ev->data.fd]);
 	std::optional<std::string>	target = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
@@ -150,7 +167,7 @@ auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct 
 			});
 	if (http // is the http valid?
 		&& target // is there a valid target?
-		) ss << fulfillRequestTarget(self, std::get<HTTPMessage::RequestData>(http->getData()).requestTarget, *target);
+		) ss << fulfillRequestTarget(self, *http, std::get<HTTPMessage::RequestData>(http->getData()).requestTarget, *target);
 	else ss << self.statusPages.at(400);
 	send(ev->data.fd, ss.str().c_str(), ss.str().length(), 0);
 	self.client_data[ev->data.fd] = "";
@@ -162,7 +179,7 @@ auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct 
 		epoll_ctl(pollfd, EPOLL_CTL_MOD, ev->data.fd, ev);
 	}
 	INFO("request from port " + std::to_string(self.port) + " fulfilled");
-	return (true);
+	return (should_close);
 }
 
 auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev) -> bool {
@@ -249,6 +266,20 @@ static auto	singleServerFromConfig(const Config& c) -> Maybe<Server> {
 			cgi = cgis.substr(0, cgis.find(','));
 		}
 	}
+	if (c.values.contains("allowedmethods")) {
+		std::string	methodcsv = c.values.at("allowedmethods");
+		methodcsv.append(",");
+		do {
+			s.supportedMethods.insert(toHTTPMethod(methodcsv.substr(0, methodcsv.find(','))));
+			methodcsv = methodcsv.substr(methodcsv.find(',') + 1);
+		} while (methodcsv.size());
+		for (HTTPMessage::HTTPMethod m : s.supportedMethods) {
+			if (!HTTPMessage::supportedRequestMethods.contains(m)) {
+				WARN("unsupported method in config file");
+				return std::nullopt;
+			}
+		}
+	} else s.supportedMethods = HTTPMessage::supportedRequestMethods;
 	s.root = c.values.at("root").substr(0, c.values.at("root").find(','));
 	s.writeEventHandler = defaultWriteEventHandler;
 	s.readEventHandler = defaultReadEventHandler;
