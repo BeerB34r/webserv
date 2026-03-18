@@ -66,8 +66,8 @@ static inline auto	extensionArgs(const std::filesystem::path& bin) -> std::vecto
 static inline auto	childProcedure [[noreturn]] (Server& self [[maybe_unused]], const std::filesystem::path& bin, int pipe[2]) -> HTTPMessage {
 	close(pipe[0]);
 	dup2(pipe[1], STDOUT_FILENO);
-	INFO("execve return: " + std::to_string(execve(extensionArgs(bin).front().c_str(), createExecveArg(extensionArgs(bin)).get(), createExecveArg({}).get())));
-	FATAL("wtf"); // execve should never fail here
+	execve(extensionArgs(bin).front().c_str(), createExecveArg(extensionArgs(bin)).get(), createExecveArg({}).get());
+	FATAL("execve failed"); // execve should never fail here
 	exit(1);
 }
 

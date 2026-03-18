@@ -41,5 +41,3 @@ haskell shebang:
 #### TODO
 - max allowed request body
 - upload file permission + storage location
-- add different interpreted language support
-
