@@ -30,10 +30,10 @@
 
 #include <HTTPMessage.hpp>
 #include <Server.hpp>
-#include <string>
+#include <filesystem>
 
 namespace cgi {
-	auto	run(Server& self, HTTPMessage http, const std::string&) -> HTTPMessage;
+	auto	run(Server& self, HTTPMessage http, const std::filesystem::path&) -> HTTPMessage;
 }
 
 #endif // CGI_HPP

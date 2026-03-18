@@ -28,27 +28,31 @@
 #ifndef SERVER_HPP
 # define SERVER_HPP
 
-#include <Config.hpp>
-#include <HTTPMessage.hpp>
-#include <defaultpage.hpp>
-#include <netinet/in.h>
+#include <Config.hpp>		// Config
+#include <HTTPMessage.hpp>	// HTTPMessage
+#include <defaultpage.hpp>	// defaultpage::codePages
+#include <filesystem>		// std::filesystem::path
+#include <netinet/in.h>		// INADDR_ANY
 
 struct Server : public Config {
 	using eventHandler = std::function<bool(Server&, int, struct epoll_event*)>;
 	short	port;
 	long	address = INADDR_ANY;
 	std::string	root;
-	eventHandler	readEventHandler;
+	eventHandler	readEventHandler; // in practice never changed
 	eventHandler	writeEventHandler;
 	auto	toLocal(const std::string&) -> std::string;
 	std::map<int,std::string>	client_data;
 	std::map<int,HTTPMessage>	statusPages = defaultpage::codePages;
 	std::set<std::string>	cgiExts;
+	std::set<std::string>	cgiDirs;
 	std::set<HTTPMessage::HTTPMethod>	supportedMethods;
 };
 
 auto	fromConfig(const Config&) -> std::vector<Server>;
 
 auto	mvpServer(const std::vector<Server>&) -> int;
+
+auto	fulfillRequestTarget(Server&, HTTPMessage, const std::string&, const std::filesystem::path&) -> HTTPMessage;
 
 #endif // SERVER_HPP

@@ -24,7 +24,10 @@ haskell shebang:
 ### cookies
 - all of it
 ### multiple cgi types
-- should be trivial, but all of it
+- currently supports:
+    - binary
+    - haskell
+    - python
 ### config
 #### done
 - interface spec => done
@@ -33,9 +36,10 @@ haskell shebang:
 - enable/disable directory listing => autoindex key
 - add doctype to headers
 - accepted methods
+- cgi => gets content (blocking)
 #### WIP
-- cgi
 #### TODO
 - max allowed request body
 - upload file permission + storage location
+- add different interpreted language support
 
