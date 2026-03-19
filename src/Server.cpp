@@ -100,10 +100,8 @@ static inline auto	isCGI(const std::filesystem::path& target, const Server& self
 	INFO("target.extension = " + target.extension().string());
 	for (const std::string& s : self.cgiExts) if (target.extension().string() == s) return true;
 	for (const std::string& s : self.cgiDirs) {
-		INFO(+ target.string());
 		if (target.string().contains(s)) return true;
 	}
-	if (target.parent_path().string().contains("/cgi-bin/")) return true;
 	return false;
 }
 
@@ -113,7 +111,7 @@ static inline auto	checkFile(const std::filesystem::path& file, int flag) -> int
 	return 0;
 }
 
-static auto	fulfillGetRequest(Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target) -> HTTPMessage {
+static auto	fulfillGetRequest(Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query) -> HTTPMessage {
 	struct stat statbuf;
 
 	if (int status = checkFile(target, R_OK)) {
@@ -127,7 +125,7 @@ static auto	fulfillGetRequest(Server& self, HTTPMessage http, const std::string&
 				&& (request == "/" || !request.ends_with('/'))
 				) {
 				INFO("index: " + self.values.at("index") + ", appended path: " + target.string() + "/" + self.values.at("index"));
-				return fulfillRequestTarget(self, http, request, target.string() + "/" + self.values.at("index"));
+				return fulfillRequestTarget(self, http, request, target.string() + "/" + self.values.at("index"), query);
 			}
 			else if (self.values.contains("autoindex")) return autoIndex(self, request, target);
 			else return self.statusPages.at(403);
@@ -148,7 +146,20 @@ static auto	fulfillGetRequest(Server& self, HTTPMessage http, const std::string&
 	}
 }
 
-auto	fulfillRequestTarget(Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target) -> HTTPMessage {
+static auto	fulfillPostRequest(Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query) -> HTTPMessage {
+	(void)query;
+	// overwrite?
+	if (std::filesystem::exists(target)) {
+
+	} else { // regular write
+	}
+	(void)http;
+	(void)request;
+	(void)target;
+	return self.statusPages.at(500);
+}
+
+auto	fulfillRequestTarget(Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query) -> HTTPMessage {
 	// make relative to root => make the normal form => check if begins with ..
 	if (target.lexically_relative(self.root).lexically_normal().string().starts_with("..")) {
 		return self.statusPages.at(403); // youre not allowed to do path traversal grr
@@ -158,14 +169,13 @@ auto	fulfillRequestTarget(Server& self, HTTPMessage http, const std::string& req
 		return self.statusPages.at(405);
 	}
 
-	// file extension based CGI
 	if (isCGI(target, self)) {
 		if (int status = checkFile(target, X_OK)) return self.statusPages.at(status);
-		return cgi::run(self, http, target);
+		return cgi::run(self, http, target, query);
 	}
 	switch (std::get<HTTPMessage::RequestData>(http.getData()).method) {
-		case (HTTPMessage::GET): return fulfillGetRequest(self, http, request, target);
-		case (HTTPMessage::POST): return self.statusPages.at(500);
+		case (HTTPMessage::GET): return fulfillGetRequest(self, http, request, target, query);
+		case (HTTPMessage::POST): return fulfillPostRequest(self, http, request, target, query); //DO THIS ONE NOW DUMBASS
 		case (HTTPMessage::DELETE): return self.statusPages.at(500);
 		default: std::unreachable();
 	}
@@ -177,7 +187,7 @@ auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct 
 	std::stringstream	ss;
 	std::optional<HTTPMessage>	http = readHTTPrequest(self.client_data[ev->data.fd]);
 	std::optional<std::filesystem::path>	target = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
-			return HTTPparsing::originForm(std::get<HTTPMessage::RequestData>(m.getData()).requestTarget).transform([](auto p) -> std::string { return p.second;});;
+			return HTTPparsing::originForm(std::get<HTTPMessage::RequestData>(m.getData()).requestTarget).transform([](auto p) -> std::string { return p.second;});
 			}).transform([self](std::string s) -> std::string {
 				// parsing prevents path traversal vulnerabilities (somehow)
 				if (self.root.ends_with('/')) {
@@ -186,9 +196,12 @@ auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct 
 					return self.root + HTTPparsing::absolutePath(s)->second; // cannot fail
 				}
 			}); // she lambda on my calc til i ulus
+	std::optional<std::string>	query = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
+			return (HTTPparsing::absolutePath > Parse::parseChar('?') > HTTPparsing::query)(std::get<HTTPMessage::RequestData>(m.getData()).requestTarget).transform([](auto p) -> std::string { return p.second;});
+		}); // lego parser makes this so nice and easy to work with holee
 	if (http // is the http valid?
 		&& target // is there a valid target?
-		) ss << fulfillRequestTarget(self, *http, std::get<HTTPMessage::RequestData>(http->getData()).requestTarget, *target);
+		) ss << fulfillRequestTarget(self, *http, std::get<HTTPMessage::RequestData>(http->getData()).requestTarget, *target, query ? *query : "");
 	else ss << self.statusPages.at(400);
 	send(ev->data.fd, ss.str().c_str(), ss.str().length(), 0);
 	self.client_data[ev->data.fd] = "";
@@ -287,8 +300,8 @@ static auto	singleServerFromConfig(const Config& c) -> Maybe<Server> {
 			}
 		}
 	}
-	if (c.values.contains("cgi")) for (const std::string& val : splitOnChar(c.values.at("cgi"), ',')) s.cgiExts.insert(val);
-	if (c.values.contains("cgidir")) for (const std::string& val : splitOnChar(c.values.at("cgidir"), ',')) s.cgiDirs.insert(val);
+	if (c.values.contains("cgi")) for (const std::string& val : splitOnChar(c.values.at("cgi"), ',')) s.cgiExts.insert(val.starts_with('.') ? val : "." + val);
+	if (c.values.contains("cgidir")) for (const std::string& val : splitOnChar(c.values.at("cgidir"), ',')) s.cgiDirs.insert(val.ends_with('/') ? val : val + "/");
 	if (c.values.contains("allowedmethods")) {
 		for (const std::string& val : splitOnChar(c.values.at("allowedmethods"), ',')) s.supportedMethods.insert(toHTTPMethod(val));
 		for (HTTPMessage::HTTPMethod m : s.supportedMethods) {
@@ -298,6 +311,7 @@ static auto	singleServerFromConfig(const Config& c) -> Maybe<Server> {
 			}
 		}
 	} else s.supportedMethods = HTTPMessage::supportedRequestMethods;
+	if (c.values.contains("datadir")) for (const std::string& val : splitOnChar(c.values.at("datadir"), ',')) s.dataDirs.insert(val);
 	s.root = c.values.at("root").substr(0, c.values.at("root").find(','));
 	s.writeEventHandler = defaultWriteEventHandler;
 	s.readEventHandler = defaultReadEventHandler;

@@ -277,7 +277,7 @@ namespace HTTPparsing {
 	extern const Parser<String>	asteriskForm = parseString("*");
 	extern const Parser<String>	authorityForm = (prependString >> uriHost) * ((prependChar >> parseChar(':')) * port);
 	extern const Parser<String>	absoluteForm = absoluteURI;
-	extern const Parser<String> originForm = (prependString >> absolutePath) * parseOpt<String>("", (prependChar >> parseChar(':')) * query);
+	extern const Parser<String> originForm = (prependString >> absolutePath) * parseOpt<String>("", query);
 	extern const Parser<String>	requestTarget
 		= originForm
 		| absoluteForm

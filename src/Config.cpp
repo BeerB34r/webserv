@@ -162,9 +162,9 @@ static auto	checkSingleServer(const Config& c) -> bool {
 	if (c.values.contains("allowedmethods")) {
 		std::string	methodcsv = c.values.at("allowedmethods");
 		methodcsv.append(",");
-		std::vector<HTTPMessage::HTTPMethod>	methods;
+		std::set<HTTPMessage::HTTPMethod>	methods;
 		do {
-			methods.push_back(toHTTPMethod(methodcsv.substr(0, methodcsv.find(','))));
+			methods.insert(toHTTPMethod(methodcsv.substr(0, methodcsv.find(','))));
 			methodcsv = methodcsv.substr(methodcsv.find(',') + 1);
 		} while (methodcsv.size());
 		for (HTTPMessage::HTTPMethod m : methods) {

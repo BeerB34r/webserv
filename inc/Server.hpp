@@ -46,6 +46,7 @@ struct Server : public Config {
 	std::map<int,HTTPMessage>	statusPages = defaultpage::codePages;
 	std::set<std::string>	cgiExts;
 	std::set<std::string>	cgiDirs;
+	std::set<std::string>	dataDirs;
 	std::set<HTTPMessage::HTTPMethod>	supportedMethods;
 };
 
@@ -53,6 +54,6 @@ auto	fromConfig(const Config&) -> std::vector<Server>;
 
 auto	mvpServer(const std::vector<Server>&) -> int;
 
-auto	fulfillRequestTarget(Server&, HTTPMessage, const std::string&, const std::filesystem::path&) -> HTTPMessage;
+auto	fulfillRequestTarget(Server&, HTTPMessage, const std::string&, const std::filesystem::path&, const std::string& query) -> HTTPMessage;
 
 #endif // SERVER_HPP

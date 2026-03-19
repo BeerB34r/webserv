@@ -25,41 +25,39 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
-#include <cstring>
 #include <defaultpage.hpp>
 #include <cgi.hpp>
 #include <debug.hpp>
-#include <memory>
-#include <unistd.h>
 #include <HTTPparsing.hpp>
-#include <sys/wait.h>
-#include <fcntl.h>
+#include <sys/wait.h> // waitpid
+#include <fcntl.h> // pipe2
 #include <filesystem>
+#include <string>
 
 #define BUFFER_SIZE 1024
 
 using namespace std::literals;
 
-static auto	createExecveArg(std::vector<std::string> v) -> std::unique_ptr<char*[]>{;
+static inline auto	createExecveArg(std::vector<std::string> v) -> std::unique_ptr<char*[]>{;
 	std::unique_ptr<char*[]>	rv(new char*[v.size() + 1]);
 
 	int i = 0;
-	for (std::string& s : v) {
-		rv[i++] = s.data();
-	}
+	for (std::string& s : v) rv[i++] = s.data();
 	rv[i] = NULL;
 	return rv;
 }
 
 static inline auto	extensionArgs(const std::filesystem::path& bin) -> std::vector<std::string> {
-	std::vector<std::string>	rv;
-
 	if (!bin.has_extension())
+		return {bin};
+	if (bin.extension().string() == ".cgi")
 		return {bin};
 	if (bin.extension().string() == ".hs")
 		return {"/usr/bin/env", "-S", "/home/mde-beer/sgoinfre/.ghcup/bin/ghc", "--run", bin}; // normally this would just say /usr/bin/env -S ghc, but since ghc isnt on the system path (i think) it doesnt work
 	if (bin.extension().string() == ".py")
 		return {"/usr/bin/env", "-S", "python3", bin};
+	if (bin.extension().string() == ".sh")
+		return {"/usr/bin/env", "-S", "sh", bin};
 	return {bin};
 }
 
@@ -92,9 +90,10 @@ static inline auto	parentProcedure (Server& self, [[maybe_unused]] const std::st
 }
 
 namespace cgi {
-	auto	run(Server& self, [[maybe_unused]] HTTPMessage http, const std::filesystem::path& bin) -> HTTPMessage {
+	auto	run(Server& self, [[maybe_unused]] HTTPMessage http, const std::filesystem::path& bin, const std::string& query) -> HTTPMessage {
 		using fd = int;
 
+		(void)query;
 		fd	fds[2];
 		if (pipe2(fds, O_NONBLOCK)) return self.statusPages.at(500); // O_NONBLOCK for whenever i put this in epoll
 

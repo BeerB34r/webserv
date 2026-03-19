@@ -28,6 +28,8 @@ haskell shebang:
     - binary
     - haskell
     - python
+    - shell
+    - .cgi (anything that can run directly)
 ### config
 #### done
 - interface spec => done
