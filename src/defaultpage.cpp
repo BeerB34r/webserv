@@ -25,7 +25,9 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
+#include "HTTPMessage.hpp"
 #include <defaultpage.hpp>
+#include <filesystem>
 
 
 namespace defaultpage {
@@ -99,5 +101,13 @@ namespace defaultpage {
 			},
 			s
 		);
+	}
+	auto	create201(const HTTPMessage& m, const std::filesystem::path& path) -> HTTPMessage {
+		return HTTPMessage(
+				"HTTP/1.1 201 Created",
+				{
+				"Location: " + m.getFieldlines().at("H) + path 
+				};
+				}
 	}
 }

@@ -148,10 +148,17 @@ static auto	fulfillGetRequest(Server& self, const HTTPMessage& http, const std::
 
 static auto	fulfillPostRequest(Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query) -> HTTPMessage {
 	(void)query;
+	INFO("target: " + target.string() + ", stem: " + target.parent_path().string());
+	bool	isInDataDir = false;
+	for (const std::string& s : self.dataDirs) if (target.parent_path().lexically_relative(s).lexically_normal().string() == ".") isInDataDir = true;
+	if (!isInDataDir) return self.statusPages.at(403);
 	// overwrite?
 	if (std::filesystem::exists(target)) {
-
+		return self.statusPages.at(403);
 	} else { // regular write
+		std::ofstream	file(target);
+		file << http.getBody();
+		file.close();
 	}
 	(void)http;
 	(void)request;
