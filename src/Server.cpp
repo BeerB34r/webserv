@@ -58,15 +58,15 @@
 // allow for std::string literals etc
 using namespace std::literals;
 
-static inline auto	to_int(const std::string& s) noexcept -> std::optional<int> {
-	int	rv{};
+static inline auto	to_int(const std::string& s) noexcept -> std::optional<size_t> {
+	size_t	rv{};
 	if (std::from_chars(s.data(), s.data() + s.size(), rv).ec == std::errc{}) {
 		return rv;
 	}
 	else return std::nullopt;
 }
 
-static auto	autoIndex(Server& self, const std::string& request, const std::filesystem::path& dirPath) -> HTTPMessage {
+static auto	autoIndex(const Server& self, const std::string& request, const std::filesystem::path& dirPath) -> HTTPMessage {
 	DIR* dir = opendir(dirPath.c_str());
 	if (!dir) {
 		WARN("could not open requested directory");
@@ -111,7 +111,7 @@ static inline auto	checkFile(const std::filesystem::path& file, int flag) -> int
 	return 0;
 }
 
-static auto	fulfillGetRequest(Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query) -> HTTPMessage {
+static auto	fulfillGetRequest(const Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query) -> HTTPMessage {
 	struct stat statbuf;
 
 	if (int status = checkFile(target, R_OK)) {
@@ -146,27 +146,46 @@ static auto	fulfillGetRequest(Server& self, const HTTPMessage& http, const std::
 	}
 }
 
-static auto	fulfillPostRequest(Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query) -> HTTPMessage {
-	(void)query;
-	INFO("target: " + target.string() + ", stem: " + target.parent_path().string());
+static auto	fulfillPostRequest(const Server& self, const HTTPMessage& http, [[maybe_unused]] const std::string& request, const std::filesystem::path& target, [[maybe_unused]] const std::string& query) -> HTTPMessage {
 	bool	isInDataDir = false;
 	for (const std::string& s : self.dataDirs) if (target.parent_path().lexically_relative(s).lexically_normal().string() == ".") isInDataDir = true;
 	if (!isInDataDir) return self.statusPages.at(403);
-	// overwrite?
+
+	// overwrite? // no
 	if (std::filesystem::exists(target)) {
 		return self.statusPages.at(403);
 	} else { // regular write
+		if (!std::filesystem::create_directories(target.parent_path())) return self.statusPages.at(500);
 		std::ofstream	file(target);
+		if (!file.is_open()) return self.statusPages.at(500);
 		file << http.getBody();
 		file.close();
+		return defaultpage::create201(http, request);
 	}
-	(void)http;
-	(void)request;
-	(void)target;
-	return self.statusPages.at(500);
 }
 
-auto	fulfillRequestTarget(Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query) -> HTTPMessage {
+static auto	fulfillDeleteRequest(const Server& self, [[maybe_unused]] const HTTPMessage& http, [[maybe_unused]] const std::string& request, const std::filesystem::path& target, [[maybe_unused]] const std::string& query) -> HTTPMessage {
+	bool	isInDataDir = false;
+	for (const std::string& s : self.dataDirs) if (target.parent_path().lexically_relative(s).lexically_normal().string() == ".") isInDataDir = true;
+	if (!isInDataDir) return self.statusPages.at(403);
+
+	if (!std::filesystem::exists(target)) {
+		return self.statusPages.at(404); // its already not there bruh
+	} else {
+		std::filesystem::remove_all(target);
+		return defaultpage::create200(
+			"<!DOCTYPE html>\n<html>\n"
+			"\t<title>" + request + " deleted</title>\n"
+			"\t<body>\n"
+			"\t\t<h1>File deleted</h1>\n"
+			"\t\t" + request + " has been deleted\n"
+			"\t</body>\n"
+			"</html>"
+		);
+	}
+}
+
+auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query) -> HTTPMessage {
 	// make relative to root => make the normal form => check if begins with ..
 	if (target.lexically_relative(self.root).lexically_normal().string().starts_with("..")) {
 		return self.statusPages.at(403); // youre not allowed to do path traversal grr
@@ -182,8 +201,8 @@ auto	fulfillRequestTarget(Server& self, HTTPMessage http, const std::string& req
 	}
 	switch (std::get<HTTPMessage::RequestData>(http.getData()).method) {
 		case (HTTPMessage::GET): return fulfillGetRequest(self, http, request, target, query);
-		case (HTTPMessage::POST): return fulfillPostRequest(self, http, request, target, query); //DO THIS ONE NOW DUMBASS
-		case (HTTPMessage::DELETE): return self.statusPages.at(500);
+		case (HTTPMessage::POST): return fulfillPostRequest(self, http, request, target, query);
+		case (HTTPMessage::DELETE): return fulfillDeleteRequest(self, http, request, target, query);
 		default: std::unreachable();
 	}
 }
@@ -226,8 +245,13 @@ auto	defaultWriteEventHandler(Server& self, [[maybe_unused]] int pollfd, struct 
 auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev) -> bool {
 	char	buf[BUFFER_SIZE];
 	int rv;
-	while ((rv = recv(ev->data.fd, buf, BUFFER_SIZE, MSG_DONTWAIT)) > 0)
+	size_t	readAmount = self.maxRequestSize < BUFFER_SIZE ? BUFFER_SIZE : self.maxRequestSize;
+	size_t	totalRead = 0;
+	while ((rv = recv(ev->data.fd, buf, readAmount, MSG_DONTWAIT)) > 0) {
 		self.client_data[ev->data.fd].append(buf, rv);
+		totalRead += rv;
+		if (totalRead >= self.maxRequestSize) break ;
+	}
 	if (rv < 0) { // assume error is EAGAIN, not allowed to check cuz fuck you
 		INFO("end of current message from port " + std::to_string(self.port));
 	};
@@ -319,6 +343,7 @@ static auto	singleServerFromConfig(const Config& c) -> Maybe<Server> {
 		}
 	} else s.supportedMethods = HTTPMessage::supportedRequestMethods;
 	if (c.values.contains("datadir")) for (const std::string& val : splitOnChar(c.values.at("datadir"), ',')) s.dataDirs.insert(val);
+	if (c.values.contains("maxrequestsize")) s.maxRequestSize = *to_int(c.values.at("maxrequestsize"));
 	s.root = c.values.at("root").substr(0, c.values.at("root").find(','));
 	s.writeEventHandler = defaultWriteEventHandler;
 	s.readEventHandler = defaultReadEventHandler;

@@ -61,7 +61,7 @@ static inline auto	extensionArgs(const std::filesystem::path& bin) -> std::vecto
 	return {bin};
 }
 
-static inline auto	childProcedure [[noreturn]] (Server& self [[maybe_unused]], const std::filesystem::path& bin, int pipe[2]) -> HTTPMessage {
+static inline auto	childProcedure [[noreturn]] (const Server& self [[maybe_unused]], const std::filesystem::path& bin, int pipe[2]) -> HTTPMessage {
 	close(pipe[0]);
 	dup2(pipe[1], STDOUT_FILENO);
 	execve(extensionArgs(bin).front().c_str(), createExecveArg(extensionArgs(bin)).get(), createExecveArg({}).get());
@@ -70,7 +70,7 @@ static inline auto	childProcedure [[noreturn]] (Server& self [[maybe_unused]], c
 }
 
 // TODO: add this to epoll so it isnt blocking
-static inline auto	parentProcedure (Server& self, [[maybe_unused]] const std::string& bin, int pipe[2], pid_t child) -> HTTPMessage {
+static inline auto	parentProcedure (const Server& self, [[maybe_unused]] const std::string& bin, int pipe[2], pid_t child) -> HTTPMessage {
 	close(pipe[1]);
 	if (waitpid(child, NULL, 0) < 0) return self.statusPages.at(500);
 	std::string	rv;
@@ -90,7 +90,7 @@ static inline auto	parentProcedure (Server& self, [[maybe_unused]] const std::st
 }
 
 namespace cgi {
-	auto	run(Server& self, [[maybe_unused]] HTTPMessage http, const std::filesystem::path& bin, const std::string& query) -> HTTPMessage {
+	auto	run(const Server& self, [[maybe_unused]] HTTPMessage http, const std::filesystem::path& bin, const std::string& query) -> HTTPMessage {
 		using fd = int;
 
 		(void)query;

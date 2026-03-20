@@ -103,11 +103,13 @@ namespace defaultpage {
 		);
 	}
 	auto	create201(const HTTPMessage& m, const std::filesystem::path& path) -> HTTPMessage {
+		std::string	locationUri = m.getFields().at("Host") + path.string();
 		return HTTPMessage(
 				"HTTP/1.1 201 Created",
 				{
-				"Location: " + m.getFieldlines().at("H) + path 
-				};
-				}
+				"Location: " + locationUri,
+				},
+				""
+				);
 	}
 }

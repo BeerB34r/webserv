@@ -216,4 +216,8 @@ auto	toString(const HTTPMessage::HTTPMethod& m) noexcept -> String {
 auto	HTTPMessage::getData(void) const noexcept -> const std::variant<RequestData,ResponseData>& {
 	return data;
 }
+
+auto	HTTPMessage::getFields(void) const noexcept -> const std::map<std::string,std::string>& {
+	return fields;
+}
 #undef _methodPair

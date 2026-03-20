@@ -32,6 +32,7 @@
 #include <HTTPMessage.hpp>	// HTTPMessage
 #include <defaultpage.hpp>	// defaultpage::codePages
 #include <filesystem>		// std::filesystem::path
+#include <limits>
 #include <netinet/in.h>		// INADDR_ANY
 
 struct Server : public Config {
@@ -48,12 +49,13 @@ struct Server : public Config {
 	std::set<std::string>	cgiDirs;
 	std::set<std::string>	dataDirs;
 	std::set<HTTPMessage::HTTPMethod>	supportedMethods;
+	size_t	maxRequestSize = std::numeric_limits<size_t>::max();
 };
 
 auto	fromConfig(const Config&) -> std::vector<Server>;
 
 auto	mvpServer(const std::vector<Server>&) -> int;
 
-auto	fulfillRequestTarget(Server&, HTTPMessage, const std::string&, const std::filesystem::path&, const std::string& query) -> HTTPMessage;
+auto	fulfillRequestTarget(const Server&, HTTPMessage, const std::string&, const std::filesystem::path&, const std::string& query) -> HTTPMessage;
 
 #endif // SERVER_HPP

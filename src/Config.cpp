@@ -100,15 +100,14 @@ auto	Config::contains(Config::Type t) const noexcept -> bool {
 	return false;
 }
 
-static auto	to_int(const std::string& s) noexcept -> std::optional<int> {
-	int	rv{};
+static auto	to_int(const std::string& s) noexcept -> std::optional<size_t> {
+	size_t	rv{};
 	if (std::from_chars(s.data(), s.data() + s.size(), rv).ec == std::errc{}) {
 		return rv;
 	}
 	else return std::nullopt;
 }
 
-#include <ranges>
 static auto	checkSingleServer(const Config& c) -> bool {
 	bool	rv = false;
 	if (!c.values.contains("listen")) {
@@ -116,7 +115,11 @@ static auto	checkSingleServer(const Config& c) -> bool {
 		rv = true;
 	}
 	if (!c.values.at("listen").contains(':')) { // just port
-		if (to_int(c.values.at("listen")) < 1) {
+		if (!to_int(c.values.at("listen"))) {
+			WARN(+ c.values.at("listen") + " could not be converted into an unsigned integer");
+			rv = true;
+		}
+		if (*to_int(c.values.at("listen")) < 1) {
 			WARN("ports must be non-zero positive integers");
 			rv = true;
 		}
@@ -127,8 +130,16 @@ static auto	checkSingleServer(const Config& c) -> bool {
 			rv = true;
 		}
 		if (ip) {
-			if ((Parse::parseChar(':') > HTTPparsing::port)(ip->second)) {
+			Maybe<std::pair<std::string,std::string>>	port = (Parse::parseChar(':') > HTTPparsing::port)(ip->first);
+			if (!port) {
 				WARN("address cannot be provided without associated port");
+				rv = true;
+			}
+			if (!port.and_then([](auto p) { return to_int(p.second); })) {
+				WARN("port could not be converted into an unsigned integer");
+				rv = true;
+			} else if (port.and_then([](auto p) { return to_int(p.second); }).value() < 1) {
+				WARN("ports must be non-zero positive integers");
 				rv = true;
 			}
 		}
@@ -172,6 +183,13 @@ static auto	checkSingleServer(const Config& c) -> bool {
 				WARN("unsupported method in config file");
 				rv = true;
 			}
+		}
+	}
+	if (c.values.contains("maxrequestsize")) {
+		std::optional<size_t>	maxReqSiz = to_int(c.values.at("maxrequestsize"));
+		if (!maxReqSiz) {
+			WARN("max request size could not be converted to an unsigned integer");
+			rv = true;
 		}
 	}
 	return rv;

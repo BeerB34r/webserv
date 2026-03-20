@@ -80,6 +80,7 @@ public:
 
 	auto	getStartline(void) const noexcept -> const std::string&;
 	auto	getFieldlines(void) const noexcept -> const std::vector<std::string>&;
+	auto	getFields(void) const noexcept -> const std::map<std::string,std::string>&;
 	auto	getBody(void) const noexcept -> const std::string&;
 	auto	isRequest(void) const noexcept -> bool;
 	auto	getData(void) const noexcept -> const std::variant<RequestData,ResponseData>&;
