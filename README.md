@@ -22,14 +22,22 @@ haskell shebang:
 
 ## TODO
 ### cookies
+#### done
+#### todo
 - all of it
 ### multiple cgi types
+#### done
 - currently supports:
     - binary
     - haskell
     - python
     - shell
     - .cgi (anything that can run directly)
+#### wip
+#### todo
+- environment
+- nonblocking
+
 ### config
 #### done
 - interface spec => done
