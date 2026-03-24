@@ -6,7 +6,7 @@
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
 /*   Created: 2026/02/16 19:03:36 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/03/10 20:29:39 by mde-beer            ########   odam.nl   */
+/*   Updated: 2026/03/24 16:37:05 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -29,6 +29,7 @@
 #include <debug.hpp>
 #include <cmdline.hpp>
 #include <Server.hpp>
+#include <webserv.hpp>
 #include <Config.hpp>
 
 auto	main(int ac, char **av) -> int {
@@ -45,5 +46,5 @@ auto	main(int ac, char **av) -> int {
 		return (1);
 	} else INFO("config valid");
 	std::vector<Server>	servers = fromConfig(*conf);
-	return (mvpServer(servers));
+	return (webserv(servers));
 }

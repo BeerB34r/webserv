@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                            ::::::::        */
-/*   Server.hpp                                              :+:    :+:       */
+/*   webserv.hpp                                             :+:    :+:       */
 /*                                                          +:+               */
 /*   By: mde-beer <mde-beer@student.codam.nl>              +#+                */
 /*                                                        +#+                 */
-/*   Created: 2026/03/10 19:53:15 by mde-beer            #+#    #+#           */
-/*   Updated: 2026/03/24 16:36:51 by mde-beer            ########   odam.nl   */
+/*   Created: 2026/03/24 16:29:02 by mde-beer            #+#    #+#           */
+/*   Updated: 2026/03/24 16:33:50 by mde-beer            ########   odam.nl   */
 /*                                                                            */
 /*   —————No norm compliance?——————                                           */
 /*   ⠀⣞⢽⢪⢣⢣⢣⢫⡺⡵⣝⡮⣗⢷⢽⢽⢽⣮⡷⡽⣜⣜⢮⢺⣜⢷⢽⢝⡽⣝                                           */
@@ -25,35 +25,19 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
-#ifndef SERVER_HPP
-# define SERVER_HPP
+#ifndef WEBSERV_HPP
+# define WEBSERV_HPP
 
-#include <Config.hpp>		// Config
-#include <HTTPMessage.hpp>	// HTTPMessage
-#include <defaultpage.hpp>	// defaultpage::codePages
-#include <filesystem>		// std::filesystem::path
-#include <limits>
-#include <netinet/in.h>		// INADDR_ANY
+#include <Server.hpp>
+#include <vector>
 
-struct Server : public Config {
-	using eventHandler = std::function<bool(Server&, int, struct epoll_event*)>;
-	short	port;
-	long	address = INADDR_ANY;
-	std::string	root;
-	eventHandler	readEventHandler; // in practice never changed
-	eventHandler	writeEventHandler;
-	auto	toLocal(const std::string&) -> std::string;
-	std::map<int,std::string>	client_data;
-	std::map<int,HTTPMessage>	statusPages = defaultpage::codePages;
-	std::map<int,HTTPMessage>	responses;
-	std::set<std::string>	cgiExts;
-	std::set<std::string>	cgiDirs;
-	std::set<std::string>	dataDirs;
-	std::set<HTTPMessage::HTTPMethod>	supportedMethods;
-	size_t	maxRequestSize = std::numeric_limits<size_t>::max();
-};
+#define BUFFER_SIZE 1024
+#define MAX_EVENTS 10
 
-auto	fromConfig(const Config&) -> std::vector<Server>;
-auto	fulfillRequestTarget(const Server&, HTTPMessage, const std::string&, const std::filesystem::path&, const std::string& query) -> HTTPMessage;
+typedef std::function<HTTPMessage(Maybe<HTTPMessage>)> RequestHandler;
 
-#endif // SERVER_HPP
+auto	webserv(const std::vector<Server>&) -> int;
+auto	defaultWriteEventHandler(Server&, int, struct epoll_event*) -> bool;
+auto	defaultReadEventHandler(Server&, int, struct epoll_event*) -> bool;
+
+#endif  // WEBSERV_HPP
