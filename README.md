@@ -27,16 +27,17 @@ haskell shebang:
 - all of it
 ### multiple cgi types
 #### done
-- currently supports:
+- can currently run:
     - binary
     - haskell
     - python
     - shell
     - .cgi (anything that can run directly)
 #### wip
+- environment => stdin now exists, create ENV properly + parse http into the requisite form
 #### todo
-- environment
 - nonblocking
+- cgi response parsing
 
 ### config
 #### done
