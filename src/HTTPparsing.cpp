@@ -27,7 +27,15 @@
 
 #include <Parser.hpp>
 #include <HTTPparsing.hpp>
+#include <charconv>
 
+static inline auto	to_int(const std::string& s) noexcept -> std::optional<size_t> {
+	size_t	rv{};
+	if (std::from_chars(s.data(), s.data() + s.size(), rv, 16).ec == std::errc{}) {
+		return rv;
+	}
+	else return std::nullopt;
+}
 namespace HTTPparsing {
 	using namespace Parse;
 	template <typename T>
@@ -57,6 +65,10 @@ namespace HTTPparsing {
 	};
 	static Fn<Fn<String(String)>(String)>	prependString = [](String prefix) noexcept -> Fn<String(String)> {
 		return [prefix](String postfix) { return prefix + postfix; };
+	};
+	static Fn<String(String)>	pctToString = [](String s) noexcept -> String {
+		char	c = to_int(s.data() + 1).value();
+		return std::string(1, c);
 	};
 
 	// http business parsing, in no particular order
