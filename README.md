@@ -40,6 +40,4 @@ haskell shebang:
 - accepted methods
 - cgi => gets content (blocking)
 - upload file permission + storage location
-#### WIP
-- max allowed request body => variable in place, move request fulfillment into ReadEventHandler so 413 can be returned properly
-#### TODO
+- max allowed request body => requestHandling now inside readEvent

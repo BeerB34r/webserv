@@ -27,29 +27,10 @@
 
 #include <Server.hpp>
 
-#include <string>
-#include <utility>
-#include <vector>
-#include <charconv>
-#include <cstring>
+#include <charconv> // std::from_chars()
 #include <fstream>
-#include <csignal>
-#include <map>
-
-#include <asm-generic/socket.h>
-#include <sys/socket.h>
-#include <sys/epoll.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <netinet/ip.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
 
 #include <debug.hpp>
-#include <HTTPMessage.hpp>
-#include <HTTPparsing.hpp>
-#include <defaultpage.hpp>
 #include <webserv.hpp>
 
 // allow for std::string literals etc

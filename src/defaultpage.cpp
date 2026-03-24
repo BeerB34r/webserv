@@ -80,6 +80,16 @@ namespace defaultpage {
 				"\t\t<h1>Error 405</h1>\n\t\toopsie poopsie, you did a fuckie wuckie\n"
 				+ pageDefaultFooter)
 		},
+		{413, HTTPMessage("HTTP/1.1 413 Content too large",
+				{
+					"Content-Length:" + std::to_string(pageDefaultFooter.size() + pageDefaultHeader.size() + 63),
+					"Content-Type: text/html",
+					"Server: webserv",
+				},
+				pageDefaultHeader +
+				"\t\t<h1>Error 413</h1>\n\t\toopsie poopsie, you did a fuckie wuckie\n"
+				+ pageDefaultFooter)
+		},
 		{500, HTTPMessage("HTTP/1.1 500 Internal server error",
 				{
 					"Content-Length:" + std::to_string(pageDefaultFooter.size() + pageDefaultHeader.size() + 62),

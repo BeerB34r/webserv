@@ -30,15 +30,12 @@
 #include <debug.hpp>
 #include <Server.hpp>
 #include <HTTPparsing.hpp>
+#include <cgi.hpp>
 
-#include <sys/socket.h>
 #include <sys/epoll.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <netinet/ip.h>
 #include <dirent.h>
-#include <fcntl.h>
-#include <unistd.h>
 
 #include <csignal>		// signal()
 #include <filesystem>	// std::filesystem
@@ -47,35 +44,25 @@
 #define PORT 8080
 #define LISTEN_BACKLOG 50
 
-static auto	autoIndex(const Server& self, const std::string& request, const std::filesystem::path& dirPath) -> HTTPMessage {
-	DIR* dir = opendir(dirPath.c_str());
-	if (!dir) {
-		WARN("could not open requested directory");
-		return self.statusPages.at(500);
-	}
-	struct dirent	*dirent;
+static auto	autoIndex(const std::string& request, const std::filesystem::path& dirPath) -> HTTPMessage {
 	std::stringstream	ss;
-	ss << "<!DOCTYPE html>\n<html>\n";
-	for (ss << "\t<title>Directory Listing</title>\n\t<body>\n\t\t<h1>Directory Listing</h1>\n\t\t<ul>\n"; (dirent = readdir(dir));) {
-		std::string	name = dirent->d_name;
-		switch (dirent->d_type) {
-			case (DT_DIR): {
-				name += '/';
-				break ;
-			} case (DT_REG): {
-				break ;
-			} default: {
-				break ;
-			}
-		}
+	ss << 
+		"<!DOCTYPE html>\n<html>\n"
+		"\t<title>Directory Listing</title>\n"
+		"\t<body>\n"
+		"\t\t<h1>Directory Listing</h1>\n"
+		"\t\t<ul>\n";
+	for (const std::filesystem::directory_entry &dirent : std::filesystem::directory_iterator{dirPath}) {
+		std::string	name = dirent.path().filename();
+		if (dirent.is_directory()) name.append("/");
 		ss << "\t\t\t<li><a href=\"" + (request.ends_with('/') ? request : request + '/') + name + "\">" << name << "</a></li>\n";
 	}
-	ss << "\t\t</ul>\n\t<body>\n</html>\n";
-	closedir(dir);
+	ss <<
+		"\t\t</ul>\n"
+		"\t<body>\n"
+		"</html>\n";
 	return defaultpage::create200(ss.str());
 }
-
-#include <cgi.hpp>
 
 static inline auto	isCGI(const std::filesystem::path& target, const Server& self) -> bool {
 	INFO("target.extension = " + target.extension().string());
@@ -108,7 +95,7 @@ static auto	fulfillGetRequest(const Server& self, const HTTPMessage& http, const
 				INFO("index: " + self.values.at("index") + ", appended path: " + target.string() + "/" + self.values.at("index"));
 				return fulfillRequestTarget(self, http, request, target.string() + "/" + self.values.at("index"), query);
 			}
-			else if (self.values.contains("autoindex")) return autoIndex(self, request, target);
+			else if (self.values.contains("autoindex")) return autoIndex(request, target);
 			else return self.statusPages.at(403);
 		};
 		case (S_IFREG): {
@@ -188,9 +175,7 @@ auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::strin
 	}
 }
 
-auto	fulfillRequest(Server& self, struct epoll_event* ev) -> std::pair<std::string,bool> {
-	bool	should_close = false;
-	std::stringstream	ss;
+auto	fulfillRequest(Server& self, struct epoll_event* ev) -> HTTPMessage {
 	std::optional<HTTPMessage>	http = readHTTPrequest(self.client_data[ev->data.fd]);
 	std::optional<std::filesystem::path>	target = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
 			return HTTPparsing::originForm(std::get<HTTPMessage::RequestData>(m.getData()).requestTarget).transform([](auto p) -> std::string { return p.second;});
@@ -207,15 +192,21 @@ auto	fulfillRequest(Server& self, struct epoll_event* ev) -> std::pair<std::stri
 		}); // lego parser makes this so nice and easy to work with holee
 	if (http // is the http valid?
 		&& target // is there a valid target?
-		) ss << fulfillRequestTarget(self, *http, std::get<HTTPMessage::RequestData>(http->getData()).requestTarget, *target, query ? *query : "");
-	else ss << self.statusPages.at(400);
-	return std::make_pair(ss.str(), should_close);
+		) return (fulfillRequestTarget(self, *http, std::get<HTTPMessage::RequestData>(http->getData()).requestTarget, *target, query ? *query : ""));
+	else return (self.statusPages.at(400));
 }
 
 auto	defaultWriteEventHandler(Server& self, int pollfd, struct epoll_event* ev) -> bool {
-	auto [response, should_close] = fulfillRequest(self, ev);
+	bool	should_close = false;
+	HTTPMessage	message = self.responses.at(ev->data.fd);
+	int	status = std::get<HTTPMessage::ResponseData>(message.getData()).statusCode;
+	if (status > 299 || 200 > status) should_close = true;
+	std::stringstream	ss;
+	ss << message;
+	std::string			response = ss.str();
 	send(ev->data.fd, response.c_str(), response.length(), 0);
 	self.client_data[ev->data.fd] = "";
+	self.responses.erase(ev->data.fd);
 	if (should_close) {
 		close(ev->data.fd);
 		self.client_data.erase(ev->data.fd);
@@ -242,6 +233,8 @@ auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev) -
 	};
 	if (totalRead >= self.maxRequestSize) {
 		self.responses.insert_or_assign(ev->data.fd, self.statusPages.at(413));
+	} else {
+		self.responses.insert_or_assign(ev->data.fd, fulfillRequest(self, ev));
 	}
 	if (rv == 0) {
 		INFO("connection closed on port " + std::to_string(self.port));
@@ -250,7 +243,6 @@ auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev) -
 		self.responses.erase(ev->data.fd);
 		return (true);
 	}
-	// should probably loop so we get the entire message because ET
 	ev->events = EPOLLOUT | EPOLLET;
 	epoll_ctl(pollfd, EPOLL_CTL_MOD, ev->data.fd, ev);
 	return (false);
