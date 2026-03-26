@@ -36,9 +36,7 @@ haskell shebang:
 - can read http bodies over stdin now
 - theres an environment
 - the little that needs to be parsed by the server is now being parsed by the server
-#### wip
-- nonblocking => framework should be in place, use-after-free in lambda callback thingy. should probably fix that somehow.
-#### todo
+- nonblocking => cautiously optimistic it works (works at home flawlessly)
 
 ### config
 #### done
