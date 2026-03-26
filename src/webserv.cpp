@@ -25,6 +25,8 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
+#include <cerrno>
+#include <cstring>
 #include <webserv.hpp>
 
 #include <debug.hpp>
@@ -65,7 +67,6 @@ static auto	autoIndex(const std::string& request, const std::filesystem::path& d
 }
 
 static inline auto	isCGI(const std::filesystem::path& target, const Server& self) -> bool {
-	INFO("target.extension = " + target.extension().string());
 	for (const std::string& s : self.cgiExts) if (target.extension().string() == s) return true;
 	for (const std::string& s : self.cgiDirs) {
 		if (target.string().contains(s)) return true;
@@ -228,15 +229,15 @@ auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev) -
 		totalRead += rv;
 		if (totalRead >= self.maxRequestSize) break ;
 	}
-	if (rv < 0) { // assume error is EAGAIN, not allowed to check cuz fuck you
+	if (rv < 0) { // assume error is EAGAIN/EWOULDBLOCK, not allowed to check cuz fuck you
 		INFO("end of current message from port " + std::to_string(self.port));
-	};
+	}
 	if (totalRead >= self.maxRequestSize) {
 		self.responses.insert_or_assign(ev->data.fd, self.statusPages.at(413));
 	} else {
 		self.responses.insert_or_assign(ev->data.fd, fulfillRequest(self, ev));
 	}
-	if (rv == 0) {
+	if (rv == 0) { // end of communication
 		INFO("connection closed on port " + std::to_string(self.port));
 		close(ev->data.fd);
 		self.client_data.erase(ev->data.fd);
@@ -383,7 +384,10 @@ auto	webserv(const std::vector<Server>& servers) -> int {
 				}
 				sockToServer[connection_socket] = listeners[socket];
 				INFO("opened connection on port " + std::to_string(listeners[socket].port));
-			} else  { // new client event
+			} else if (current->events & EPOLLERR) { // error on socket
+					close(socket);
+					sockToServer.erase(socket);
+			} else { // client read/write event
 				Server&	serverConfig = sockToServer[socket];
 				if (current->events & EPOLLIN
 					? serverConfig.readEventHandler(serverConfig, pollfd, current)

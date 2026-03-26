@@ -12,7 +12,7 @@ INC				=	-I$(INCDIR)
 INCDIR			:=	inc/
 VPATH			=	$(SRCDIR)
 CXXFLAGS		?=	-Wall -Wextra -Werror -pedantic -fsanitize=address
-CPPFLAGS		=	$(INC) -std=c++2b 
+CPPFLAGS		=	$(INC) -std=c++2b
 LDFLAGS			:=
 CXX				:=	c++
 RM				:=	rm -fr
