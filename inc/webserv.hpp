@@ -36,8 +36,8 @@
 
 typedef std::function<HTTPMessage(Maybe<HTTPMessage>)> RequestHandler;
 
-auto	webserv(const std::vector<Server>&) -> int;
-auto	defaultWriteEventHandler(Server&, int, struct epoll_event*) -> bool;
-auto	defaultReadEventHandler(Server&, int, struct epoll_event*) -> bool;
+auto	webserv(const std::vector<Server>&) noexcept -> int;
+auto	defaultWriteEventHandler(Server&, int, struct epoll_event*, struct in_addr) -> bool;
+auto	defaultReadEventHandler(Server&, int, struct epoll_event*, struct in_addr) -> bool;
 
 #endif  // WEBSERV_HPP

@@ -36,7 +36,7 @@
 #include <netinet/in.h>		// INADDR_ANY
 
 struct Server : public Config {
-	using eventHandler = std::function<bool(Server&, int, struct epoll_event*)>;
+	using eventHandler = std::function<bool(Server&, int, struct epoll_event*, struct in_addr)>;
 	short	port;
 	long	address = INADDR_ANY;
 	std::string	root;
@@ -54,6 +54,6 @@ struct Server : public Config {
 };
 
 auto	fromConfig(const Config&) -> std::vector<Server>;
-auto	fulfillRequestTarget(const Server&, HTTPMessage, const std::string&, const std::filesystem::path&, const std::string& query) -> HTTPMessage;
+auto	fulfillRequestTarget(const Server&, HTTPMessage, const std::string&, const std::filesystem::path&, const std::string&, struct in_addr) -> HTTPMessage;
 
 #endif // SERVER_HPP

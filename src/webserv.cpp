@@ -80,7 +80,7 @@ static inline auto	checkFile(const std::filesystem::path& file, int flag) -> int
 	return 0;
 }
 
-static auto	fulfillGetRequest(const Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query) -> HTTPMessage {
+static auto	fulfillGetRequest(const Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> HTTPMessage {
 	struct stat statbuf;
 
 	if (int status = checkFile(target, R_OK)) {
@@ -94,7 +94,7 @@ static auto	fulfillGetRequest(const Server& self, const HTTPMessage& http, const
 				&& (request == "/" || !request.ends_with('/'))
 				) {
 				INFO("index: " + self.values.at("index") + ", appended path: " + target.string() + "/" + self.values.at("index"));
-				return fulfillRequestTarget(self, http, request, target.string() + "/" + self.values.at("index"), query);
+				return fulfillRequestTarget(self, http, request, target.string() + "/" + self.values.at("index"), query, peer_addr);
 			}
 			else if (self.values.contains("autoindex")) return autoIndex(request, target);
 			else return self.statusPages.at(403);
@@ -154,7 +154,7 @@ static auto	fulfillDeleteRequest(const Server& self, [[maybe_unused]] const HTTP
 	}
 }
 
-auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query) -> HTTPMessage {
+auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> HTTPMessage {
 	// make relative to root => make the normal form => check if begins with ..
 	if (target.lexically_relative(self.root).lexically_normal().string().starts_with("..")) {
 		return self.statusPages.at(403); // youre not allowed to do path traversal grr
@@ -166,18 +166,19 @@ auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::strin
 
 	if (isCGI(target, self)) {
 		if (int status = checkFile(target, X_OK)) return self.statusPages.at(status);
-		return cgi::run(self, http, target, query);
+		return cgi::run(self, http, target, query, peer_addr);
 	}
 	switch (std::get<HTTPMessage::RequestData>(http.getData()).method) {
-		case (HTTPMessage::GET): return fulfillGetRequest(self, http, request, target, query);
+		case (HTTPMessage::GET): return fulfillGetRequest(self, http, request, target, query, peer_addr);
 		case (HTTPMessage::POST): return fulfillPostRequest(self, http, request, target, query);
 		case (HTTPMessage::DELETE): return fulfillDeleteRequest(self, http, request, target, query);
 		default: std::unreachable();
 	}
 }
 
-auto	fulfillRequest(Server& self, struct epoll_event* ev) -> HTTPMessage {
+auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_addr) noexcept -> HTTPMessage {
 	std::optional<HTTPMessage>	http = readHTTPrequest(self.client_data[ev->data.fd]);
+	if (http && !http->getFields().contains("Host")) return self.statusPages.at(400);
 	std::optional<std::filesystem::path>	target = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
 			return HTTPparsing::originForm(std::get<HTTPMessage::RequestData>(m.getData()).requestTarget).transform([](auto p) -> std::string { return p.second;});
 			}).transform([self](std::string s) -> std::string {
@@ -191,17 +192,16 @@ auto	fulfillRequest(Server& self, struct epoll_event* ev) -> HTTPMessage {
 	std::optional<std::string>	query = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
 			return (HTTPparsing::absolutePath > Parse::parseChar('?') > HTTPparsing::query)(std::get<HTTPMessage::RequestData>(m.getData()).requestTarget).transform([](auto p) -> std::string { return p.second;});
 		}); // lego parser makes this so nice and easy to work with holee
-	if (http // is the http valid?
-		&& target // is there a valid target?
-		) return (fulfillRequestTarget(self, *http, std::get<HTTPMessage::RequestData>(http->getData()).requestTarget, *target, query ? *query : ""));
+	if (http && target)
+		return (fulfillRequestTarget(self, *http, std::get<HTTPMessage::RequestData>(http->getData()).requestTarget, *target, query ? *query : "", peer_addr));
 	else return (self.statusPages.at(400));
 }
 
-auto	defaultWriteEventHandler(Server& self, int pollfd, struct epoll_event* ev) -> bool {
+auto	defaultWriteEventHandler(Server& self, int pollfd, struct epoll_event* ev, [[maybe_unused]] struct in_addr peer_addr) -> bool {
 	bool	should_close = false;
 	HTTPMessage	message = self.responses.at(ev->data.fd);
 	int	status = std::get<HTTPMessage::ResponseData>(message.getData()).statusCode;
-	if (status > 299 || 200 > status) should_close = true;
+	if (status > 399 || 200 > status) should_close = true;
 	std::stringstream	ss;
 	ss << message;
 	std::string			response = ss.str();
@@ -219,7 +219,7 @@ auto	defaultWriteEventHandler(Server& self, int pollfd, struct epoll_event* ev) 
 	return (should_close);
 }
 
-auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev) -> bool {
+auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev, struct in_addr peer_addr) -> bool {
 	char	buf[BUFFER_SIZE];
 	int rv;
 	size_t	readAmount = self.maxRequestSize < BUFFER_SIZE ? BUFFER_SIZE : self.maxRequestSize;
@@ -235,7 +235,7 @@ auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev) -
 	if (totalRead >= self.maxRequestSize) {
 		self.responses.insert_or_assign(ev->data.fd, self.statusPages.at(413));
 	} else {
-		self.responses.insert_or_assign(ev->data.fd, fulfillRequest(self, ev));
+		self.responses.insert_or_assign(ev->data.fd, fulfillRequest(self, ev, peer_addr));
 	}
 	if (rv == 0) { // end of communication
 		INFO("connection closed on port " + std::to_string(self.port));
@@ -301,26 +301,27 @@ error:
 }
 
 // returns negative on error
-auto	getIncomingConnection(int socket) -> int {
+auto	getIncomingConnection(int socket, struct in_addr& peer_addr) noexcept -> int {
 	struct sockaddr_in	peer;
 	socklen_t	peerAddrSize = sizeof(peer);
 	int	out = accept(socket, reinterpret_cast<struct sockaddr *>(&peer), &peerAddrSize);
 	if (out < 0) WARN("failed to accept incoming traffic");
+	else peer_addr = peer.sin_addr;
 	return out;
 }
 
 bool	stop;
 
-auto	intHandler([[maybe_unused]] int signum) -> void {
+auto	intHandler([[maybe_unused]] int signum) noexcept -> void {
 	stop = true;
 	INFO("SIGINT recieved, exiting gracefully");
 }
 
-static auto	closeMap(std::map<int,Server>&	fds) -> void {
+static auto	closeMap(std::map<int,Server>&	fds) noexcept -> void {
 	for (auto fd : fds) close(fd.first);
 }
 
-auto	webserv(const std::vector<Server>& servers) -> int {
+auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 	using namespace std::literals;
 	using fd = int;
 	int	server_rv = 0;
@@ -365,6 +366,7 @@ auto	webserv(const std::vector<Server>& servers) -> int {
 	__sighandler_t	originalIntHandler = signal(SIGINT, intHandler);
 	int message_count = 0;
 	std::map<fd,Server>		sockToServer;
+	std::map<fd,struct in_addr>	sockToAddr;
 	while (!stop || server_rv) {
 		int	nfds = epoll_wait(pollfd, events, MAX_EVENTS, 0);
 		for (int n = 0; n < nfds; n++) {
@@ -372,7 +374,8 @@ auto	webserv(const std::vector<Server>& servers) -> int {
 			int	socket = current->data.fd;
 
 			if (listeners.contains(socket)) { // new connection
-				fd	connection_socket = getIncomingConnection(socket);
+				struct in_addr peer_addr;
+				fd	connection_socket = getIncomingConnection(socket, peer_addr);
 				if (connection_socket < 0) continue ;
 				ev.events = EPOLLIN | EPOLLET;
 				ev.data.fd = connection_socket;
@@ -383,17 +386,22 @@ auto	webserv(const std::vector<Server>& servers) -> int {
 					break ;
 				}
 				sockToServer[connection_socket] = listeners[socket];
+				sockToAddr[connection_socket] = peer_addr;
 				INFO("opened connection on port " + std::to_string(listeners[socket].port));
 			} else if (current->events & EPOLLERR) { // error on socket
 					close(socket);
 					sockToServer.erase(socket);
+					sockToAddr.erase(socket);
 			} else { // client read/write event
 				Server&	serverConfig = sockToServer[socket];
+				struct in_addr	peer_addr = sockToAddr[socket];
 				if (current->events & EPOLLIN
-					? serverConfig.readEventHandler(serverConfig, pollfd, current)
-					: serverConfig.writeEventHandler(serverConfig, pollfd, current)
-					) // can we pretend that airplanes in the night sky are like shooting stars
+					? serverConfig.readEventHandler(serverConfig, pollfd, current, peer_addr)
+					: serverConfig.writeEventHandler(serverConfig, pollfd, current, peer_addr)
+					) { // can we pretend that airplanes in the night sky are like shooting stars
 					sockToServer.erase(socket);
+					sockToAddr.erase(socket);
+				}
 				message_count += !(current->events & EPOLLIN);
 			}
 		}

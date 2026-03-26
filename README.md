@@ -33,8 +33,9 @@ haskell shebang:
     - python
     - shell
     - .cgi (anything that can run directly)
+- can read http bodies over stdin now
+- theres an environment
 #### wip
-- environment => stdin now exists, create ENV properly + parse http into the requisite form
 #### todo
 - nonblocking
 - cgi response parsing
