@@ -114,7 +114,7 @@ static inline auto	parentProcedure (const Server& self, HTTPMessage http, int in
 	close(in[1]);
 	int output = out[0];
 	Server copy	= self;
-	static std::function<HTTPMessage()>	callback = [copy, http, output, child]()->HTTPMessage {
+	std::function<HTTPMessage()>	callback = [copy, output, child]()->HTTPMessage {
 		if (waitpid(child, NULL, 0) < 0) return copy.statusPages.at(500);
 		std::string	rv;
 		char buf[BUFFER_SIZE];

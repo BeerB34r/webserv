@@ -28,6 +28,7 @@
 #include <Parser.hpp>
 #include <HTTPparsing.hpp>
 #include <charconv>
+#include <algorithm>
 
 static inline auto	to_int(const std::string& s) noexcept -> std::optional<size_t> {
 	size_t	rv{};
