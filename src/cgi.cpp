@@ -112,21 +112,39 @@ static inline auto	parentProcedure (const Server& self, HTTPMessage& http, int i
 	close(out[1]);
 	if (!http.getBody().empty()) write(in[1], http.getBody().c_str(), http.getBody().size());
 	close(in[1]);
-	if (waitpid(child, NULL, 0) < 0) return self.statusPages.at(500);
-	std::string	rv;
-	char buf[BUFFER_SIZE];
-	int	bytes;
-	do {
-		bytes = read(out[0], buf, BUFFER_SIZE);
-		rv.append(buf, bytes);
-	} while (bytes != 0);
-	close(out[0]);
-	Maybe<Pair<std::string,std::vector<std::string>>>	parseRes = (HTTPparsing::fieldLines < HTTPparsing::crlf)(rv); // holy type
-	if (!parseRes) return self.statusPages.at(500);
-	std::vector<std::string>	fieldlines = parseRes->second;
-	std::string	body = parseRes->first;
-	fieldlines.push_back("Content-Length: " + std::to_string(body.size()));
-	return HTTPMessage("HTTP/1.1 200 OK", fieldlines, body);
+	std::function<HTTPMessage()>	callback = [self, http, out, child]()->HTTPMessage {
+		if (waitpid(child, NULL, 0) < 0) return self.statusPages.at(500);
+		std::string	rv;
+		char buf[BUFFER_SIZE];
+		int	bytes;
+		do {
+			bytes = read(out[0], buf, BUFFER_SIZE);
+			rv.append(buf, bytes);
+		} while (bytes != 0);
+		close(out[0]);
+		Maybe<Pair<std::string,std::vector<std::string>>>	parseRes = (HTTPparsing::fieldLines < HTTPparsing::crlf)(rv); // holy type
+		if (!parseRes) return self.statusPages.at(500);
+		std::vector<std::string>	fieldlines = parseRes->second;
+		std::string	status = "";
+		bool	found_status = false, found_length = false;
+		for (size_t i = 0; i < fieldlines.size(); i++) {
+			if (fieldlines[i].starts_with("Status:")) {
+				status = fieldlines[i].substr(fieldlines[i].find(':') + 1);
+				fieldlines.erase(fieldlines.begin() + i);
+				if (found_status) return self.statusPages.at(500);
+				found_status = true;
+			}
+			if (fieldlines[i].starts_with("Content-Length:")) {
+				if (found_length) return self.statusPages.at(500);
+				found_length = true;
+			}
+		}
+		std::string	body = parseRes->first;
+		if (!found_length) fieldlines.push_back("Content-Length: " + std::to_string(body.size()));
+		if (status.empty()) return HTTPMessage("HTTP/1.1 200 OK", fieldlines, body);
+		else return HTTPMessage("HTTP/1.1 " + status, fieldlines, body);
+	};
+	return callback();
 }
 
 namespace cgi {

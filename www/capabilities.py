@@ -1,5 +1,6 @@
 import os
 
+print("Status:201 OK but cooler\r")
 print("\r")
 for var in [
     "AUTH_TYPE",

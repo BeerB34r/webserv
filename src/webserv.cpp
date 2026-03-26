@@ -80,7 +80,7 @@ static inline auto	checkFile(const std::filesystem::path& file, int flag) -> int
 	return 0;
 }
 
-static auto	fulfillGetRequest(const Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> HTTPMessage {
+static auto	fulfillGetRequest(const Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<std::function<HTTPMessage()>,int>,HTTPMessage> {
 	struct stat statbuf;
 
 	if (int status = checkFile(target, R_OK)) {
@@ -154,7 +154,7 @@ static auto	fulfillDeleteRequest(const Server& self, [[maybe_unused]] const HTTP
 	}
 }
 
-auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> HTTPMessage {
+auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<std::function<HTTPMessage()>,int>,HTTPMessage> {
 	// make relative to root => make the normal form => check if begins with ..
 	if (target.lexically_relative(self.root).lexically_normal().string().starts_with("..")) {
 		return self.statusPages.at(403); // youre not allowed to do path traversal grr
@@ -176,7 +176,7 @@ auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::strin
 	}
 }
 
-auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_addr) noexcept -> HTTPMessage {
+auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_addr) noexcept -> std::variant<std::pair<std::function<HTTPMessage()>,int>,HTTPMessage> {
 	std::optional<HTTPMessage>	http = readHTTPrequest(self.client_data[ev->data.fd]);
 	if (http && !http->getFields().contains("Host")) return self.statusPages.at(400);
 	std::optional<std::filesystem::path>	target = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
@@ -232,10 +232,17 @@ auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev, s
 	if (rv < 0) { // assume error is EAGAIN/EWOULDBLOCK, not allowed to check cuz fuck you
 		INFO("end of current message from port " + std::to_string(self.port));
 	}
-	if (totalRead >= self.maxRequestSize) {
-		self.responses.insert_or_assign(ev->data.fd, self.statusPages.at(413));
-	} else {
-		self.responses.insert_or_assign(ev->data.fd, fulfillRequest(self, ev, peer_addr));
+	if (totalRead >= self.maxRequestSize) self.responses.insert_or_assign(ev->data.fd, self.statusPages.at(413));
+	else {
+		// varaint containing either:
+		// A => HTTP response
+		// B => callback that returns a response, and the read-end of a pipe containing a CGI process (for epoll)
+		std::variant<std::pair<std::function<HTTPMessage()>,int>,HTTPMessage>	requestResult = fulfillRequest(self, ev, peer_addr);
+		if (std::holds_alternative<HTTPMessage>(requestResult)) self.responses.insert_or_assign(ev->data.fd, std::get<HTTPMessage>(requestResult));
+		else {
+			auto [ callback, fd ] = std::get<std::pair<std::function<HTTPMessage()>,int>>(requestResult);
+			// prepare callback
+		}
 	}
 	if (rv == 0) { // end of communication
 		INFO("connection closed on port " + std::to_string(self.port));
