@@ -46,6 +46,8 @@ struct Server : public Config {
 	std::map<int,std::string>	client_data;
 	std::map<int,HTTPMessage>	statusPages = defaultpage::codePages;
 	std::map<int,HTTPMessage>	responses;
+	std::map<int,pid_t>			hasCallback;
+	std::map<pid_t,std::pair<bool,std::function<HTTPMessage()>>>	callbacks;
 	std::set<std::string>	cgiExts;
 	std::set<std::string>	cgiDirs;
 	std::set<std::string>	dataDirs;

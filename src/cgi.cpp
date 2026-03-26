@@ -96,7 +96,7 @@ static inline auto	buildEnviron(HTTPMessage& http, const std::string& query, str
 	return rv;
 }
 
-static inline auto	childProcedure [[noreturn]] (const Server& self [[maybe_unused]], HTTPMessage& http, const std::filesystem::path& bin, const std::string& query, struct in_addr peer_addr, int in[2], int out[2]) -> HTTPMessage {
+static inline auto	childProcedure [[noreturn]] (const Server& self [[maybe_unused]], HTTPMessage& http, const std::filesystem::path& bin, const std::string& query, struct in_addr peer_addr, int in[2], int out[2]) -> std::pair<std::function<HTTPMessage()>,pid_t> {
 	close(in[1]);
 	close(out[0]);
 	dup2(in[0], STDIN_FILENO);
@@ -106,24 +106,26 @@ static inline auto	childProcedure [[noreturn]] (const Server& self [[maybe_unuse
 	exit(1);
 }
 
-// TODO: add this to epoll so it isnt blocking
-static inline auto	parentProcedure (const Server& self, HTTPMessage& http, int in[2], int out[2], pid_t child) -> HTTPMessage {
+// TODO: figure out where the silly use-after-free is 
+static inline auto	parentProcedure (const Server& self, HTTPMessage http, int in[2], int out[2], pid_t child) -> std::pair<std::function<HTTPMessage()>,int> {
 	close(in[0]);
 	close(out[1]);
 	if (!http.getBody().empty()) write(in[1], http.getBody().c_str(), http.getBody().size());
 	close(in[1]);
-	std::function<HTTPMessage()>	callback = [self, http, out, child]()->HTTPMessage {
-		if (waitpid(child, NULL, 0) < 0) return self.statusPages.at(500);
+	int output = out[0];
+	Server copy	= self;
+	static std::function<HTTPMessage()>	callback = [copy, http, output, child]()->HTTPMessage {
+		if (waitpid(child, NULL, 0) < 0) return copy.statusPages.at(500);
 		std::string	rv;
 		char buf[BUFFER_SIZE];
 		int	bytes;
 		do {
-			bytes = read(out[0], buf, BUFFER_SIZE);
+			bytes = read(output, buf, BUFFER_SIZE);
 			rv.append(buf, bytes);
 		} while (bytes != 0);
-		close(out[0]);
+		close(output);
 		Maybe<Pair<std::string,std::vector<std::string>>>	parseRes = (HTTPparsing::fieldLines < HTTPparsing::crlf)(rv); // holy type
-		if (!parseRes) return self.statusPages.at(500);
+		if (!parseRes) return copy.statusPages.at(500);
 		std::vector<std::string>	fieldlines = parseRes->second;
 		std::string	status = "";
 		bool	found_status = false, found_length = false;
@@ -131,11 +133,11 @@ static inline auto	parentProcedure (const Server& self, HTTPMessage& http, int i
 			if (fieldlines[i].starts_with("Status:")) {
 				status = fieldlines[i].substr(fieldlines[i].find(':') + 1);
 				fieldlines.erase(fieldlines.begin() + i);
-				if (found_status) return self.statusPages.at(500);
+				if (found_status) return copy.statusPages.at(500);
 				found_status = true;
 			}
 			if (fieldlines[i].starts_with("Content-Length:")) {
-				if (found_length) return self.statusPages.at(500);
+				if (found_length) return copy.statusPages.at(500);
 				found_length = true;
 			}
 		}
@@ -144,11 +146,11 @@ static inline auto	parentProcedure (const Server& self, HTTPMessage& http, int i
 		if (status.empty()) return HTTPMessage("HTTP/1.1 200 OK", fieldlines, body);
 		else return HTTPMessage("HTTP/1.1 " + status, fieldlines, body);
 	};
-	return callback();
+	return std::make_pair(callback, child);
 }
 
 namespace cgi {
-	auto	run(const Server& self, [[maybe_unused]] HTTPMessage http, const std::filesystem::path& bin, const std::string& query, struct in_addr peer_addr) -> HTTPMessage {
+	auto	run(const Server& self, [[maybe_unused]] HTTPMessage http, const std::filesystem::path& bin, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<std::function<HTTPMessage()>,pid_t>,HTTPMessage> {
 		using fd = int;
 
 		(void)query;

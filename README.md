@@ -35,10 +35,10 @@ haskell shebang:
     - .cgi (anything that can run directly)
 - can read http bodies over stdin now
 - theres an environment
+- the little that needs to be parsed by the server is now being parsed by the server
 #### wip
+- nonblocking => framework should be in place, use-after-free in lambda callback thingy. should probably fix that somehow.
 #### todo
-- nonblocking
-- cgi response parsing
 
 ### config
 #### done

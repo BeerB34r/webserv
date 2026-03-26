@@ -38,6 +38,7 @@
 #include <sys/stat.h>
 #include <netinet/ip.h>
 #include <dirent.h>
+#include <sys/wait.h> // waitpid
 
 #include <csignal>		// signal()
 #include <filesystem>	// std::filesystem
@@ -80,7 +81,7 @@ static inline auto	checkFile(const std::filesystem::path& file, int flag) -> int
 	return 0;
 }
 
-static auto	fulfillGetRequest(const Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<std::function<HTTPMessage()>,int>,HTTPMessage> {
+static auto	fulfillGetRequest(const Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<std::function<HTTPMessage()>,pid_t>,HTTPMessage> {
 	struct stat statbuf;
 
 	if (int status = checkFile(target, R_OK)) {
@@ -154,7 +155,7 @@ static auto	fulfillDeleteRequest(const Server& self, [[maybe_unused]] const HTTP
 	}
 }
 
-auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<std::function<HTTPMessage()>,int>,HTTPMessage> {
+auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<std::function<HTTPMessage()>,pid_t>,HTTPMessage> {
 	// make relative to root => make the normal form => check if begins with ..
 	if (target.lexically_relative(self.root).lexically_normal().string().starts_with("..")) {
 		return self.statusPages.at(403); // youre not allowed to do path traversal grr
@@ -176,7 +177,7 @@ auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::strin
 	}
 }
 
-auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_addr) noexcept -> std::variant<std::pair<std::function<HTTPMessage()>,int>,HTTPMessage> {
+auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_addr) noexcept -> std::variant<std::pair<std::function<HTTPMessage()>,pid_t>,HTTPMessage> {
 	std::optional<HTTPMessage>	http = readHTTPrequest(self.client_data[ev->data.fd]);
 	if (http && !http->getFields().contains("Host")) return self.statusPages.at(400);
 	std::optional<std::filesystem::path>	target = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
@@ -199,6 +200,11 @@ auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_ad
 
 auto	defaultWriteEventHandler(Server& self, int pollfd, struct epoll_event* ev, [[maybe_unused]] struct in_addr peer_addr) -> bool {
 	bool	should_close = false;
+	if (self.hasCallback.contains(ev->data.fd)) {
+		pid_t proc = self.hasCallback[ev->data.fd];
+		self.callbacks[proc].first = true;
+		return false;
+	}
 	HTTPMessage	message = self.responses.at(ev->data.fd);
 	int	status = std::get<HTTPMessage::ResponseData>(message.getData()).statusCode;
 	if (status > 399 || 200 > status) should_close = true;
@@ -237,10 +243,12 @@ auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev, s
 		// varaint containing either:
 		// A => HTTP response
 		// B => callback that returns a response, and the read-end of a pipe containing a CGI process (for epoll)
-		std::variant<std::pair<std::function<HTTPMessage()>,int>,HTTPMessage>	requestResult = fulfillRequest(self, ev, peer_addr);
+		std::variant<std::pair<std::function<HTTPMessage()>,pid_t>,HTTPMessage>	requestResult = fulfillRequest(self, ev, peer_addr);
 		if (std::holds_alternative<HTTPMessage>(requestResult)) self.responses.insert_or_assign(ev->data.fd, std::get<HTTPMessage>(requestResult));
 		else {
-			auto [ callback, fd ] = std::get<std::pair<std::function<HTTPMessage()>,int>>(requestResult);
+			auto [ callback, proc ] = std::get<std::pair<std::function<HTTPMessage()>,pid_t>>(requestResult);
+			self.hasCallback[ev->data.fd] = proc;
+			self.callbacks[proc] = std::make_pair(false, callback);
 			// prepare callback
 		}
 	}
@@ -397,6 +405,12 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 				INFO("opened connection on port " + std::to_string(listeners[socket].port));
 			} else if (current->events & EPOLLERR) { // error on socket
 					close(socket);
+					Server& server = sockToServer.at(socket);
+					if (server.hasCallback.contains(socket)) {
+						kill(server.hasCallback.at(socket), SIGKILL);
+						server.callbacks.erase(server.hasCallback.at(socket));
+						server.hasCallback.erase(socket);
+					}
 					sockToServer.erase(socket);
 					sockToAddr.erase(socket);
 			} else { // client read/write event
@@ -410,6 +424,38 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 					sockToAddr.erase(socket);
 				}
 				message_count += !(current->events & EPOLLIN);
+			}
+		}
+		// check if child is doing shit
+		for (std::pair<const fd, Server>& a : sockToServer) {
+			Server &s = a.second;
+			if (s.hasCallback.empty()) continue ;
+			for (std::pair<const int, pid_t> p : s.hasCallback) {
+				int	sock = p.first;
+				pid_t proc = p.second;
+				int status;
+				if (int rv = waitpid(proc, &status, WNOHANG) != p.second) {
+					if (rv == 0) continue ; // WNOHANG, child is still running
+					if (rv < 0) {
+						s.responses.insert_or_assign(sock, s.statusPages.at(500));
+						s.callbacks.erase(proc);
+						s.hasCallback.erase(sock);
+					}
+				};
+				auto& [ ready, callback ]  = s.callbacks[proc];
+				if (!ready) {
+					s.responses.insert_or_assign(sock, callback());
+					s.callbacks.erase(proc);
+					s.hasCallback.erase(sock);
+				} else {
+					HTTPMessage http = callback();
+					std::stringstream ss;
+					ss << http;
+					std::string response = ss.str();
+					send(sock, response.c_str(), response.size(), 0);
+					sockToServer.erase(sock);
+					sockToAddr.erase(sock);
+				}
 			}
 		}
 	}
