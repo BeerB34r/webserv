@@ -460,6 +460,12 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 		}
 	}
 	signal(SIGINT, originalIntHandler);
+	// KILL ALL KIDS
+	for (std::pair<const fd, Server>& a : sockToServer) {
+		Server& s = a.second;
+		if (s.hasCallback.empty()) continue ;
+		for (std::pair<const int, pid_t> p : s.hasCallback) kill(p.second, SIGKILL);
+	}
 	closeMap(listeners);
 	close(pollfd);
 	INFO(+ std::to_string(message_count) + " messages processed");
