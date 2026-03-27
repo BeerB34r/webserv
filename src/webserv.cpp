@@ -125,7 +125,9 @@ static auto	fulfillPostRequest(const Server& self, const HTTPMessage& http, [[ma
 	if (std::filesystem::exists(target)) {
 		return self.statusPages.at(403);
 	} else { // regular write
-		if (!std::filesystem::create_directories(target.parent_path())) return self.statusPages.at(500);
+		std::error_code	ec;
+		std::filesystem::create_directories(target.parent_path(), ec);
+		if (ec) return self.statusPages.at(500);
 		std::ofstream	file(target);
 		if (!file.is_open()) return self.statusPages.at(500);
 		file << http.getBody();
@@ -378,7 +380,8 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 		}
 	}
 
-	__sighandler_t	originalIntHandler = signal(SIGINT, intHandler);
+	__sighandler_t	originalIntHandler = std::signal(SIGINT, intHandler);
+	__sighandler_t	originalTermHandler = std::signal(SIGTERM, intHandler);
 	int message_count = 0;
 	std::map<fd,Server>		sockToServer;
 	std::map<fd,struct in_addr>	sockToAddr;
@@ -459,7 +462,8 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 			}
 		}
 	}
-	signal(SIGINT, originalIntHandler);
+	std::signal(SIGINT, originalIntHandler);
+	std::signal(SIGTERM, originalTermHandler);
 	// KILL ALL KIDS
 	for (std::pair<const fd, Server>& a : sockToServer) {
 		Server& s = a.second;

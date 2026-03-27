@@ -118,6 +118,7 @@ namespace defaultpage {
 				"HTTP/1.1 201 Created",
 				{
 				"Location: " + locationUri,
+				"Content-Length:0"
 				},
 				""
 				);

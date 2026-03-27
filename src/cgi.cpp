@@ -48,17 +48,21 @@ static inline auto	createExecveArg(std::vector<std::string> v) -> std::unique_pt
 }
 
 static inline auto	extensionArgs(const std::filesystem::path& bin) -> std::vector<std::string> {
+	// indefinite is such a fuckass word. because of it, now we use the timeout
+	// POSIX utility to make sure that theres a time limit on any CGI request
+	// (the ones that can take time)
+	// no operation outside of CGI should ever take enough time for the 30s timeout to matter
 	if (!bin.has_extension())
-		return {bin};
+		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(TIMEOUT.count()), std::to_string(TIMEOUT.count()), bin};
 	if (bin.extension().string() == ".cgi")
-		return {bin};
+		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(TIMEOUT.count()), std::to_string(TIMEOUT.count()), bin};
 	if (bin.extension().string() == ".hs")
-		return {"/usr/bin/env", "-S", "/home/mde-beer/sgoinfre/.ghcup/bin/ghc", "--run", bin}; // normally this would just say /usr/bin/env -S ghc, but since ghc isnt on the system path (i think) it doesnt work
+		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(TIMEOUT.count()), std::to_string(TIMEOUT.count()), "/usr/bin/env", "-S", "/home/mde-beer/sgoinfre/.ghcup/bin/ghc", "--run", bin}; // normally this would just say /usr/bin/env -S ghc, but since ghc isnt on the system path (i think) it doesnt work
 	if (bin.extension().string() == ".py")
-		return {"/usr/bin/env", "-S", "python3", bin};
+		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(TIMEOUT.count()), std::to_string(TIMEOUT.count()), "/usr/bin/env", "-S", "python3", bin};
 	if (bin.extension().string() == ".sh")
-		return {"/usr/bin/env", "-S", "sh", bin};
-	return {bin};
+		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(TIMEOUT.count()), std::to_string(TIMEOUT.count()), "/usr/bin/env", "-S", "sh", bin};
+	return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(TIMEOUT.count()), std::to_string(TIMEOUT.count()), bin};
 }
 
 static inline auto	addrToString(struct in_addr addr) -> std::string {
