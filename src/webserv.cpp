@@ -159,7 +159,9 @@ static auto	fulfillDeleteRequest(const Server& self, [[maybe_unused]] const HTTP
 
 auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<int,pid_t>,HTTPMessage> {
 	// make relative to root => make the normal form => check if begins with ..
-	if (target.lexically_relative(self.root).lexically_normal().string().starts_with("..")) {
+	std::string	serverRoot = self.root;
+	for (const std::pair<const std::string, std::string>& p : self.routes) if (request.starts_with(p.first)) serverRoot = p.second;
+	if (target.lexically_relative(serverRoot).lexically_normal().string().starts_with("..")) {
 		return self.statusPages.at(403); // youre not allowed to do path traversal grr
 	}
 
@@ -185,11 +187,16 @@ auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_ad
 	std::optional<std::filesystem::path>	target = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
 			return HTTPparsing::originForm(std::get<HTTPMessage::RequestData>(m.getData()).requestTarget).transform([](auto p) -> std::string { return p.second;});
 			}).transform([self](std::string s) -> std::string {
-				// parsing prevents path traversal vulnerabilities (somehow)
+				std::string	absolutePath = HTTPparsing::absolutePath(s)->second; // cannot fail
+				for (const std::pair<const std::string, std::string>& p : self.routes) {
+					if (absolutePath.starts_with(p.first)) {
+						return p.second + absolutePath.substr(p.first.size());
+					}
+				}
 				if (self.root.ends_with('/')) {
-					return self.root + HTTPparsing::absolutePath(s)->second.substr(1); // cannot fail
+					return self.root + absolutePath.substr(1);
 				} else {
-					return self.root + HTTPparsing::absolutePath(s)->second; // cannot fail
+					return self.root + absolutePath;
 				}
 			}); // she lambda on my calc til i ulus
 	std::optional<std::string>	query = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
@@ -355,7 +362,6 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 		FATAL("Failed to instantiate any listening sockets");
 		return (1); // cuz you only need the light when its burnin low
 	}
-
 	INFO("listener count: " + std::to_string(listeners.size()));
 
 	// set up epoll

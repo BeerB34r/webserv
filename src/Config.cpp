@@ -42,7 +42,7 @@ auto	Config::empty(void) const noexcept -> bool {
 
 auto	Config::propogateToBlocks(void) noexcept -> bool {
 	for (Config& c : blocks) {
-		if (c.type != Config::ERROR) for (const std::pair<const std::string,std::string>&	p : values) {
+		if (c.type != Config::ERROR && c.type != Config::ROUTE) for (const std::pair<const std::string,std::string>&	p : values) {
 			std::string	key;
 			std::string	val;
 			std::tie(key,val) = p;
@@ -64,6 +64,7 @@ auto	fromType(Config::Type t) noexcept -> const std::string {
 		case (Config::SERVER): return "Server";
 		case (Config::TOP_LEVEL): return "Config file";
 		case (Config::ERROR): return "Error";
+		case (Config::ROUTE): return "Route";
 		default: return "";
 	}
 }
@@ -114,7 +115,7 @@ static auto	checkSingleServer(const Config& c) -> bool {
 		WARN("server lacks \"listen\" key");
 		rv = true;
 	}
-	if (!c.values.at("listen").contains(':')) { // just port
+	else if (!c.values.at("listen").contains(':')) { // just port
 		if (!to_int(c.values.at("listen"))) {
 			WARN(+ c.values.at("listen") + " could not be converted into an unsigned integer");
 			rv = true;
@@ -190,6 +191,19 @@ static auto	checkSingleServer(const Config& c) -> bool {
 		if (!maxReqSiz) {
 			WARN("max request size could not be converted to an unsigned integer");
 			rv = true;
+		}
+	}
+	for (Config& routes : c.getBlocks(Config::ROUTE)) {
+		INFO("checking route...");
+		std::map<std::string,std::string>	routeList;
+		for (std::pair<const std::string, std::string> &p : routes.values) {
+			std::string	networkPath = p.first;
+			std::string	filePath = p.second;
+			if (filePath.contains(',') || routeList.contains(networkPath)) {
+				WARN("routes cannot contain duplicate network paths");
+				rv = true;
+			}
+			routeList.insert_or_assign(networkPath, filePath);
 		}
 	}
 	return rv;

@@ -41,6 +41,7 @@ public:
 		SERVER,
 		ERROR,
 		HTTP,
+		ROUTE,
 		UNKNOWN
 	} type;
 	std::string	ident;

@@ -125,6 +125,13 @@ static auto	singleServerFromConfig(const Config& c) -> Maybe<Server> {
 	s.root = c.values.at("root").substr(0, c.values.at("root").find(','));
 	s.writeEventHandler = defaultWriteEventHandler;
 	s.readEventHandler = defaultReadEventHandler;
+	for (const Config& routes : c.getBlocks(Config::ROUTE)) for (const std::pair<const std::string, std::string>& p : routes.values) {
+		std::string	key = p.first;
+		std::string	value = p.second;
+		if (key.ends_with('/') && !value.ends_with('/')) value.push_back('/');
+		if (value.ends_with('/') && !key.ends_with('/')) key.push_back('/');
+		s.routes.insert(p);
+	}
 	return s;
 }
 

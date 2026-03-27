@@ -47,6 +47,7 @@ namespace ConfigParse {
 		if (low == "server") return Config::SERVER;
 		if (low == "http") return Config::HTTP;
 		if (low == "error") return Config::ERROR;
+		if (low == "route") return Config::ROUTE;
 		return Config::UNKNOWN;
 	};
 	static Fn<String(std::vector<String>)>	concat = [](std::vector<String> v) noexcept -> String {
