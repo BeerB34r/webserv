@@ -23,8 +23,11 @@ haskell shebang:
 ## TODO
 ### cookies
 #### done
-#### todo
-- all of it
+- Set-Cookies field from CGI can and does just work, arguably not the servers
+  responibility to handle cookies. static pages dont have a way to manipulate
+  header fields, and thus it is the CGI's responsibility to change cookies and
+  alter behaviour accordingly (or clients)
+- www/cgi-bin/haskell changes behaviour based on cookies
 ### multiple cgi types
 #### done
 - can currently run:
@@ -36,7 +39,7 @@ haskell shebang:
 - can read http bodies over stdin now
 - theres an environment
 - the little that needs to be parsed by the server is now being parsed by the server
-- nonblocking => cautiously optimistic it works (works at home flawlessly)
+- nonblocking
 
 ### config
 #### done

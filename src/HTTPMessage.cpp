@@ -94,9 +94,6 @@ auto	readHTTPmessage(const String& s) noexcept -> Maybe<HTTPMessage> {
 	if (!startlineParseRes) return std::nullopt;
 	Maybe<Parser<std::vector<String>>::resultType>	fieldlinesParseRes = (HTTPparsing::fieldLines < HTTPparsing::crlf)(startlineParseRes->first);
 	if (!fieldlinesParseRes) return std::nullopt;
-	// [TODO]: check for Content-Length field and fail if theres a mismatch
-	// NOTE: since this takes strings, that might happen even earlier? will
-	// investigate as it becomes relevant -Mats
 	Maybe<Parser<String>::resultType>	bodyParseRes = HTTPparsing::messageBody(fieldlinesParseRes->first);
 	if (!bodyParseRes) return std::nullopt;
 	return HTTPMessage(startlineParseRes->second, fieldlinesParseRes->second, bodyParseRes->second);
@@ -104,15 +101,11 @@ auto	readHTTPmessage(const String& s) noexcept -> Maybe<HTTPMessage> {
   // statusLine == response
 
 
-// [TODO]: return some actual value on failure so as to make the response accurate
 auto	readHTTPrequest(const String& s) noexcept -> Maybe<HTTPMessage> {
 	Maybe<Parser<String>::resultType>	requestlineParseRes = (HTTPparsing::requestLine < HTTPparsing::crlf)(s);
 	if (!requestlineParseRes) return std::nullopt; // from here on, everything is copied wholesale from readHTTPmessage()
 	Maybe<Parser<std::vector<String>>::resultType>	fieldlinesParseRes = (HTTPparsing::fieldLines < HTTPparsing::crlf)(requestlineParseRes->first);
 	if (!fieldlinesParseRes) return std::nullopt;
-	// [TODO]: check for Content-Length field and fail if theres a mismatch
-	// NOTE: since this takes strings, that might happen even earlier? will
-	// investigate as it becomes relevant -Mats
 	Maybe<Parser<String>::resultType>	bodyParseRes = HTTPparsing::messageBody(fieldlinesParseRes->first);
 	if (!bodyParseRes) return std::nullopt;
 	return HTTPMessage(requestlineParseRes->second, fieldlinesParseRes->second, bodyParseRes->second);
@@ -123,9 +116,6 @@ auto	readHTTPresponse(const String& s) noexcept -> Maybe<HTTPMessage> {
 	if (!statuslineParseRes) return std::nullopt; // from here on, everything is copied wholesale from readHTTPmessage()
 	Maybe<Parser<std::vector<String>>::resultType>	fieldlinesParseRes = (HTTPparsing::fieldLines < HTTPparsing::crlf)(statuslineParseRes->first);
 	if (!fieldlinesParseRes) return std::nullopt;
-	// [TODO]: check for Content-Length field and fail if theres a mismatch
-	// NOTE: since this takes strings, that might happen even earlier? will
-	// investigate as it becomes relevant -Mats
 	Maybe<Parser<String>::resultType>	bodyParseRes = HTTPparsing::messageBody(fieldlinesParseRes->first);
 	if (!bodyParseRes) return std::nullopt;
 	return HTTPMessage(statuslineParseRes->second, fieldlinesParseRes->second, bodyParseRes->second);

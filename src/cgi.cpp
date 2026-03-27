@@ -93,6 +93,11 @@ static inline auto	buildEnviron(HTTPMessage& http, const std::string& query, str
 	};
 	std::vector<std::string>	rv;
 	for (std::string s : defaultEnvs) rv.push_back(s);
+	for (const std::pair<const std::string, std::string> &p : http.getFields()) {
+		if (p.first == "Content-Length" || p.first == "Host") continue ;
+		if (p.first == "Cookie") rv.push_back("HTTP_COOKIE=" + p.second);
+		else rv.push_back(p.first + "=" + p.second);
+	}
 	return rv;
 }
 

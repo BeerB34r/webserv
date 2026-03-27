@@ -70,7 +70,8 @@ executable hello
     -- Other library packages from which modules are imported.
     build-depends:
                   base ^>=4.18.3.0,
-                  cgi
+                  cgi,
+                  text, xhtml
 
     -- Directories containing source files.
     hs-source-dirs:   app

@@ -435,7 +435,7 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 				pid_t proc = p.second;
 				int status;
 				if (int rv = waitpid(proc, &status, WNOHANG) != p.second) {
-					if (rv == 0) continue ; // WNOHANG, child is still running
+					if (rv == 0) continue ; // WNOHANG, child is still running // TODO: timeout
 					if (rv < 0) {
 						s.responses.insert_or_assign(sock, s.statusPages.at(500));
 						s.callbacks.erase(proc);
