@@ -17,9 +17,9 @@ makefile:
 ```sh
 make
 ```
-> !NOTE
-Compilation has only been tested using clang++ (>=15), but should not require much
-configuration to work with your local c++ compiler.
+> [!NOTE]
+>Compilation has only been tested using clang++ (>=15), but should not require much
+>configuration to work with your local c++ compiler.
 
 
 Further information on how to run the program can be found using `./webserv -h`.
@@ -32,9 +32,9 @@ utility installed.
 Any script that is executable from the get-go should work, including:
 - script files with shebangs (`#!/path/to/interpreter`)
 - binary executables
-> !NOTE
-The server will not be able to execute these files without execution
-permissions!
+> [!NOTE]
+>The server will not be able to execute these files without execution
+>permissions!
 
 In addition to this, it supports filename extension based interpreting for the
 following extensions:
@@ -42,9 +42,9 @@ following extensions:
 - python (`.py`)
 - bash/sh (`.sh`)
 - cgi-binaries (`.cgi`)
-> !NOTE
-cgi-binaries are not ran using any interpreter, they are just a special file
-extension that the server will interpret as a cgi script
+> [!NOTE]
+>cgi-binaries are not ran using any interpreter, they are just a special file
+>extension that the server will interpret as a cgi script
 
 # Resources
 
