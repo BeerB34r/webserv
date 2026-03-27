@@ -47,7 +47,7 @@ struct Server : public Config {
 	std::map<int,HTTPMessage>	statusPages = defaultpage::codePages;
 	std::map<int,HTTPMessage>	responses;
 	std::map<int,pid_t>			hasCallback;
-	std::map<pid_t,std::pair<bool,std::function<HTTPMessage()>>>	callbacks;
+	std::map<pid_t,std::pair<bool,int>>	callbacks;
 	std::set<std::string>	cgiExts;
 	std::set<std::string>	cgiDirs;
 	std::set<std::string>	dataDirs;
@@ -56,6 +56,6 @@ struct Server : public Config {
 };
 
 auto	fromConfig(const Config&) -> std::vector<Server>;
-auto	fulfillRequestTarget(const Server&, HTTPMessage, const std::string&, const std::filesystem::path&, const std::string&, struct in_addr) -> std::variant<std::pair<std::function<HTTPMessage()>,int>,HTTPMessage>;
+auto	fulfillRequestTarget(const Server&, HTTPMessage, const std::string&, const std::filesystem::path&, const std::string&, struct in_addr) -> std::variant<std::pair<int,pid_t>,HTTPMessage>;
 
 #endif // SERVER_HPP

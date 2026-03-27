@@ -33,7 +33,8 @@
 #include <filesystem>
 
 namespace cgi {
-	auto	run(const Server& self, HTTPMessage http, const std::filesystem::path&, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<std::function<HTTPMessage()>,pid_t>,HTTPMessage>;
+	auto	run(const Server& self, HTTPMessage http, const std::filesystem::path&, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<int,pid_t>,HTTPMessage>;
+	auto	callback(int output, Server& server, pid_t proc) -> HTTPMessage;
 }
 
 #endif // CGI_HPP
