@@ -213,9 +213,9 @@ static auto	ipv4ToLong(const std::string& s) noexcept -> long {
 	std::string	addr = (s == "localhost") ? "127.0.0.1" : s;
 	long	rv;
 	long	firstOctet = *to_int(addr);
-	long	secondOctet = *to_int(addr.substr(addr.find('.')));
-	long	thirdOctet = *to_int(addr.substr(addr.find('.', addr.find('.') + 1)));
-	long	fourthOctet = *to_int(addr.substr(addr.find('.', addr.find('.', addr.find('.') + 1) + 1)));
+	long	secondOctet = *to_int(addr.substr(addr.find('.') + 1));
+	long	thirdOctet = *to_int(addr.substr(addr.find('.', addr.find('.') + 1) + 1));
+	long	fourthOctet = *to_int(addr.substr(addr.find('.', addr.find('.', addr.find('.') + 1) + 1) + 1));
 
 	rv = (firstOctet << (8 * 3)) + (secondOctet << (8 * 2)) + (thirdOctet << (8 * 1)) + (fourthOctet << (8 * 0));
 	return rv;
