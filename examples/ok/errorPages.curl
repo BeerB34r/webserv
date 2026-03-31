@@ -1,0 +1,5 @@
+echo "custom error pages"
+echo "404"
+curl localhost:8004/path/does/not/exist
+echo "400"
+echo "bad request" | nc localhost 8004

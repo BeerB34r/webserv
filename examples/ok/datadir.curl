@@ -1,0 +1,9 @@
+echo "data"
+echo "DELETE non-existing file"
+curl localhost:8003/data/foobar -X DELETE
+echo "POST file"
+curl localhost:8003/data/foobar -d "Hello,\ World!$'\n'" #escaped space cuz fuck you
+echo "GET POST'ed file"
+curl localhost:8003/data/foobar
+echo "DELETE file"
+curl localhost:8003/data/foobar -X DELETE

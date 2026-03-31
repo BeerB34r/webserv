@@ -1,0 +1,9 @@
+echo "extension cgi"
+echo "haskell"
+curl localhost:8001/hello.hs
+echo "python"
+curl localhost:8001/hello.py
+echo "bash"
+curl localhost:8001/hello.sh
+echo "executable binaries"
+curl localhost:8001/hello.cgi

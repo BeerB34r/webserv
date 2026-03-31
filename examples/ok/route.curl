@@ -1,0 +1,2 @@
+echo "route /foo =\> ./www/bar"
+curl localhost:8011/foo/baz

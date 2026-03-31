@@ -1,0 +1,9 @@
+echo "methods:"
+echo "GET"
+curl localhost:8007/index.html -X GET
+echo "POST"
+curl localhost:8007/index.html -X POST
+echo "DELETE"
+curl localhost:8007/index.html -X DELETE
+echo "other"
+curl localhost:8007/index.html -X other

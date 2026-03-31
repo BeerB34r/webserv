@@ -1,0 +1,2 @@
+echo "directory based cgi"
+curl localhost:8002/cgi-bin/haskell

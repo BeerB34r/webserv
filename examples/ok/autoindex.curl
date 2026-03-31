@@ -1,0 +1,2 @@
+echo "directory listing"
+curl localhost:8000/

@@ -1,0 +1,2 @@
+echo "yoink index file from directory"
+curl localhost:8005

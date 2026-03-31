@@ -1,0 +1,5 @@
+echo "request size"
+echo "ok"
+curl localhost:8006/index.html
+echo "too big"
+head -c 1024 ./src/cgi.cpp | curl localhost:8006 -d '@-'
