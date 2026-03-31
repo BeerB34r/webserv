@@ -9,6 +9,7 @@
 !*.md
 !*.cabal
 !example/*
+!examples/*/*
 !www/*
 !www/*/*
 !makefile
