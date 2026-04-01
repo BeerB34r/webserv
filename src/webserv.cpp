@@ -160,13 +160,24 @@ static auto	fulfillDeleteRequest(const Server& self, [[maybe_unused]] const HTTP
 auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<int,pid_t>,HTTPMessage> {
 	// make relative to root => make the normal form => check if begins with ..
 	std::string	serverRoot = self.root;
-	for (const std::pair<const std::string, std::string>& p : self.routes) if (request.starts_with(p.first)) serverRoot = p.second;
-	if (target.lexically_relative(serverRoot).lexically_normal().string().starts_with("..")) {
-		return self.statusPages.at(403); // youre not allowed to do path traversal grr
+	for (const std::pair<const std::string, std::pair<std::string,std::set<HTTPMessage::HTTPMethod>>>& p : self.routes) {
+		if (request.starts_with(p.first))
+			serverRoot = p.second.first;
+		else continue ;
+		if (target.lexically_relative(serverRoot).lexically_normal().string().starts_with("..")) {
+			return self.statusPages.at(403); // youre not allowed to do path traversal grr
+		}
+		if (!p.second.second.contains(std::get<HTTPMessage::RequestData>(http.getData()).method)) {
+			return self.statusPages.at(405);
+		}
 	}
-
-	if (!self.supportedMethods.contains(std::get<HTTPMessage::RequestData>(http.getData()).method)) {
-		return self.statusPages.at(405);
+	if (serverRoot == self.root) {
+		if (target.lexically_relative(serverRoot).lexically_normal().string().starts_with("..")) {
+			return self.statusPages.at(403); // youre not allowed to do path traversal grr
+		}
+		if (!self.supportedMethods.contains(std::get<HTTPMessage::RequestData>(http.getData()).method)) {
+			return self.statusPages.at(405);
+		}
 	}
 
 	if (isCGI(target, self)) {
@@ -188,9 +199,9 @@ auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_ad
 			return HTTPparsing::originForm(std::get<HTTPMessage::RequestData>(m.getData()).requestTarget).transform([](auto p) -> std::string { return p.second;});
 			}).transform([self](std::string s) -> std::string {
 				std::string	absolutePath = HTTPparsing::absolutePath(s)->second; // cannot fail
-				for (const std::pair<const std::string, std::string>& p : self.routes) {
+				for (const std::pair<const std::string, std::pair<std::string,std::set<HTTPMessage::HTTPMethod>>>& p : self.routes) {
 					if (absolutePath.starts_with(p.first)) {
-						return p.second + absolutePath.substr(p.first.size());
+						return p.second.first + absolutePath.substr(p.first.size());
 					}
 				}
 				if (self.root.ends_with('/')) {

@@ -112,7 +112,10 @@ static auto	singleServerFromConfig(const Config& c) -> Maybe<Server> {
 	if (c.values.contains("cgi")) for (const std::string& val : splitOnChar(c.values.at("cgi"), ',')) s.cgiExts.insert(val.starts_with('.') ? val : "." + val);
 	if (c.values.contains("cgidir")) for (const std::string& val : splitOnChar(c.values.at("cgidir"), ',')) s.cgiDirs.insert(val.ends_with('/') ? val : val + "/");
 	if (c.values.contains("allowedmethods")) {
-		for (const std::string& val : splitOnChar(c.values.at("allowedmethods"), ',')) s.supportedMethods.insert(toHTTPMethod(val));
+		for (const std::string& val : splitOnChar(c.values.at("allowedmethods"), ',')) {
+			if (val.empty()) continue ;
+			else s.supportedMethods.insert(toHTTPMethod(val));
+		}
 		for (HTTPMessage::HTTPMethod m : s.supportedMethods) {
 			if (!HTTPMessage::supportedRequestMethods.contains(m)) {
 				WARN("unsupported method in config file");
@@ -125,12 +128,25 @@ static auto	singleServerFromConfig(const Config& c) -> Maybe<Server> {
 	s.root = c.values.at("root").substr(0, c.values.at("root").find(','));
 	s.writeEventHandler = defaultWriteEventHandler;
 	s.readEventHandler = defaultReadEventHandler;
-	for (const Config& routes : c.getBlocks(Config::ROUTE)) for (const std::pair<const std::string, std::string>& p : routes.values) {
-		std::string	key = p.first;
-		std::string	value = p.second;
-		if (key.ends_with('/') && !value.ends_with('/')) value.push_back('/');
-		if (value.ends_with('/') && !key.ends_with('/')) key.push_back('/');
-		s.routes.insert(p);
+	for (const Config& routes : c.getBlocks(Config::ROUTE)) {
+		std::set<HTTPMessage::HTTPMethod>	methods = {};
+		std::map<std::string,std::string>	netToPath = {};
+		for (const std::pair<const std::string, std::string>& p : routes.values) {
+			std::string	key = p.first;
+			std::string	value = p.second;
+			if (key == "allowedmethods") {
+				std::string	methodcsv = value + ',';
+				do {
+					methods.insert(toHTTPMethod(methodcsv.substr(0, methodcsv.find(','))));
+					methodcsv = methodcsv.substr(methodcsv.find(',') + 1);
+				}	while (methodcsv.size());
+				continue ;
+			}
+			if (!value.ends_with('/')) value.push_back('/');
+			if (!key.ends_with('/')) key.push_back('/');
+			netToPath.insert(std::make_pair(key, value));
+		}
+		for (auto& p : netToPath) s.routes.insert(std::make_pair(p.first, std::make_pair(p.second, methods)));
 	}
 	return s;
 }

@@ -176,6 +176,7 @@ static auto	checkSingleServer(const Config& c) -> bool {
 		methodcsv.append(",");
 		std::set<HTTPMessage::HTTPMethod>	methods;
 		do {
+			if (methodcsv == ",") break ;
 			methods.insert(toHTTPMethod(methodcsv.substr(0, methodcsv.find(','))));
 			methodcsv = methodcsv.substr(methodcsv.find(',') + 1);
 		} while (methodcsv.size());
@@ -197,6 +198,23 @@ static auto	checkSingleServer(const Config& c) -> bool {
 		INFO("checking route...");
 		std::map<std::string,std::string>	routeList;
 		for (std::pair<const std::string, std::string> &p : routes.values) {
+			if (p.first == "allowedmethods") { // allowed methods check
+				std::string	methodcsv = p.second;
+				methodcsv.append(",");
+				std::set<HTTPMessage::HTTPMethod>	methods;
+				do {
+					if (methodcsv == ",") break ;
+					methods.insert(toHTTPMethod(methodcsv.substr(0, methodcsv.find(','))));
+					methodcsv = methodcsv.substr(methodcsv.find(',') + 1);
+				} while (methodcsv.size());
+				for (HTTPMessage::HTTPMethod m : methods) {
+					if (!HTTPMessage::supportedRequestMethods.contains(m)) {
+						WARN("unsupported method in config file");
+						rv = true;
+					}
+				}
+				continue ;
+			}
 			std::string	networkPath = p.first;
 			std::string	filePath = p.second;
 			if (filePath.contains(',') || routeList.contains(networkPath)) {
