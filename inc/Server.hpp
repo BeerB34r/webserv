@@ -54,6 +54,7 @@ struct Server : public Config {
 	std::set<std::string>	dataDirs;
 	std::set<HTTPMessage::HTTPMethod>	supportedMethods;
 	size_t	maxRequestSize = std::numeric_limits<size_t>::max();
+	size_t	maxBodySize = std::numeric_limits<size_t>::max();
 };
 
 auto	fromConfig(const Config&) -> std::vector<Server>;
