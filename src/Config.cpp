@@ -194,6 +194,13 @@ static auto	checkSingleServer(const Config& c) -> bool {
 			rv = true;
 		}
 	}
+	if (c.values.contains("maxbodysize")) {
+		std::optional<size_t>	maxBody = to_int(c.values.at("maxbodysize"));
+		if (!maxBody) {
+			WARN("max body size could not be converted to an unsigned integer");
+			rv = true;
+		}
+	}
 	for (Config& routes : c.getBlocks(Config::ROUTE)) {
 		INFO("checking route...");
 		std::map<std::string,std::string>	routeList;

@@ -248,17 +248,20 @@ auto	defaultWriteEventHandler(Server& self, int pollfd, struct epoll_event* ev, 
 auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev, struct in_addr peer_addr) -> bool {
 	char	buf[BUFFER_SIZE];
 	int rv;
-	size_t	readAmount = self.maxRequestSize < BUFFER_SIZE ? BUFFER_SIZE : self.maxRequestSize;
+	size_t	readAmount = BUFFER_SIZE;
 	size_t	totalRead = 0;
+	std::optional<HTTPMessage>	http = std::nullopt;
 	while ((rv = recv(ev->data.fd, buf, readAmount, MSG_DONTWAIT)) > 0) {
 		self.client_data[ev->data.fd].append(buf, rv);
 		totalRead += rv;
-		if (totalRead >= self.maxRequestSize) break ;
+		if (totalRead > self.maxRequestSize) break ;
+		http = readHTTPrequest(self.client_data[ev->data.fd]); // inefficient, but like, lets benchmark it first lmao
+		if (http && http->getBody().size() > self.maxBodySize) break ;
 	}
 	if (rv < 0) { // assume error is EAGAIN/EWOULDBLOCK, not allowed to check cuz fuck you
 		INFO("end of current message from port " + std::to_string(self.port));
 	}
-	if (totalRead >= self.maxRequestSize) self.responses.insert_or_assign(ev->data.fd, self.statusPages.at(413));
+	if (totalRead > self.maxRequestSize || (http && http->getBody().size() > self.maxBodySize)) self.responses.insert_or_assign(ev->data.fd, self.statusPages.at(413));
 	else {
 		// varaint containing either:
 		// A => HTTP response
