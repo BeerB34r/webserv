@@ -1,3 +1,3 @@
 echo "cgi timeout"
 echo "time should be roughly 1s"
-time curl localhost:8013/sleepy.sh
+time curl -s localhost:8013/sleepy.sh >/dev/null -f "%E"
