@@ -202,7 +202,7 @@ static auto	checkSingleServer(const Config& c) -> bool {
 		}
 	}
 	if (c.values.contains("cgi-timeout")) {
-		std::optional<size_t>	cgiTimeout = to_int(c.values.at("maxbodysize"));
+		std::optional<size_t>	cgiTimeout = to_int(c.values.at("cgi-timeout"));
 		if (!cgiTimeout) {
 			WARN("cgiTimeout could not be converted to an unsigned integer");
 			rv = true;

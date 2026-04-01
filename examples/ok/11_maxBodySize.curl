@@ -1,0 +1,5 @@
+echo "max body size"
+echo "should succeed"
+echo -n "hell" | curl localhost:8012/hello.cgi -d @-
+echo "should fail"
+echo -n "hello" | curl localhost:8012/hello.cgi -d @-

@@ -1,0 +1,5 @@
+echo "route methods"
+echo "default allows nothing"
+curl localhost:8014/index.html
+echo "route /foo allows GET"
+curl localhost:8014/foo/index.html
