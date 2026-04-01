@@ -32,8 +32,6 @@
 #include <Server.hpp>
 #include <filesystem>
 
-#define TIMEOUT 30s
-
 namespace cgi {
 	auto	run(const Server& self, HTTPMessage http, const std::filesystem::path&, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<int,pid_t>,HTTPMessage>;
 	auto	callback(int output, Server& server, pid_t proc) -> HTTPMessage;

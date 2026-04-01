@@ -30,10 +30,14 @@
 
 #include <Config.hpp>		// Config
 #include <HTTPMessage.hpp>	// HTTPMessage
+#include <chrono>
 #include <defaultpage.hpp>	// defaultpage::codePages
 #include <filesystem>		// std::filesystem::path
 #include <limits>
 #include <netinet/in.h>		// INADDR_ANY
+
+using namespace std::literals;
+#define DEFAULT_TIMEOUT 30s
 
 struct Server : public Config {
 	using eventHandler = std::function<bool(Server&, int, struct epoll_event*, struct in_addr)>;
@@ -55,6 +59,7 @@ struct Server : public Config {
 	std::set<HTTPMessage::HTTPMethod>	supportedMethods;
 	size_t	maxRequestSize = std::numeric_limits<size_t>::max();
 	size_t	maxBodySize = std::numeric_limits<size_t>::max();
+	std::chrono::seconds	cgiTimeout = DEFAULT_TIMEOUT;
 };
 
 auto	fromConfig(const Config&) -> std::vector<Server>;

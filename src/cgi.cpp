@@ -47,22 +47,22 @@ static inline auto	createExecveArg(std::vector<std::string> v) -> std::unique_pt
 	return rv;
 }
 
-static inline auto	extensionArgs(const std::filesystem::path& bin) -> std::vector<std::string> {
+static inline auto	extensionArgs(const std::filesystem::path& bin, const Server& self) -> std::vector<std::string> {
 	// indefinite is such a fuckass word. because of it, now we use the timeout
 	// POSIX utility to make sure that theres a time limit on any CGI request
 	// (the ones that can take time)
 	// no operation outside of CGI should ever take enough time for the 30s timeout to matter
 	if (!bin.has_extension())
-		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(TIMEOUT.count()), std::to_string(TIMEOUT.count()), bin};
+		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(self.cgiTimeout.count()), std::to_string(self.cgiTimeout.count()), bin};
 	if (bin.extension().string() == ".cgi")
-		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(TIMEOUT.count()), std::to_string(TIMEOUT.count()), bin};
+		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(self.cgiTimeout.count()), std::to_string(self.cgiTimeout.count()), bin};
 	if (bin.extension().string() == ".hs")
-		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(TIMEOUT.count()), std::to_string(TIMEOUT.count()), "/usr/bin/env", "-S", "/home/mde-beer/sgoinfre/.ghcup/bin/ghc", "--run", bin}; // normally this would just say /usr/bin/env -S ghc, but since ghc isnt on the system path (i think) it doesnt work
+		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(self.cgiTimeout.count()), std::to_string(self.cgiTimeout.count()), "/usr/bin/env", "-S", "/home/mde-beer/sgoinfre/.ghcup/bin/ghc", "--run", bin}; // normally this would just say /usr/bin/env -S ghc, but since ghc isnt on the system path (i think) it doesnt work
 	if (bin.extension().string() == ".py")
-		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(TIMEOUT.count()), std::to_string(TIMEOUT.count()), "/usr/bin/env", "-S", "python3", bin};
+		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(self.cgiTimeout.count()), std::to_string(self.cgiTimeout.count()), "/usr/bin/env", "-S", "python3", bin};
 	if (bin.extension().string() == ".sh")
-		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(TIMEOUT.count()), std::to_string(TIMEOUT.count()), "/usr/bin/env", "-S", "sh", bin};
-	return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(TIMEOUT.count()), std::to_string(TIMEOUT.count()), bin};
+		return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(self.cgiTimeout.count()), std::to_string(self.cgiTimeout.count()), "/usr/bin/env", "-S", "sh", bin};
+	return {"/usr/bin/env", "-S", "timeout", "-k", std::to_string(self.cgiTimeout.count()), std::to_string(self.cgiTimeout.count()), bin};
 }
 
 static inline auto	addrToString(struct in_addr addr) -> std::string {
@@ -105,12 +105,12 @@ static inline auto	buildEnviron(HTTPMessage& http, const std::string& query, str
 	return rv;
 }
 
-static inline auto	childProcedure [[noreturn]] (const Server& self [[maybe_unused]], HTTPMessage& http, const std::filesystem::path& bin, const std::string& query, struct in_addr peer_addr, int in[2], int out[2]) -> std::pair<int,pid_t> {
+static inline auto	childProcedure [[noreturn]] (const Server& self, HTTPMessage& http, const std::filesystem::path& bin, const std::string& query, struct in_addr peer_addr, int in[2], int out[2]) -> std::pair<int,pid_t> {
 	close(in[1]);
 	close(out[0]);
 	dup2(in[0], STDIN_FILENO);
 	dup2(out[1], STDOUT_FILENO);
-	execve(extensionArgs(bin).front().c_str(), createExecveArg(extensionArgs(bin)).get(), createExecveArg(buildEnviron(http, query, peer_addr, bin, self.port)).get());
+	execve(extensionArgs(bin, self).front().c_str(), createExecveArg(extensionArgs(bin, self)).get(), createExecveArg(buildEnviron(http, query, peer_addr, bin, self.port)).get());
 	FATAL("execve failed"); // execve should never fail here
 	exit(1);
 }
@@ -161,12 +161,12 @@ namespace cgi {
 
 		(void)query;
 		fd	in[2];
-		if (pipe2(in, O_NONBLOCK)) return self.statusPages.at(500); // O_NONBLOCK for whenever i put this in epoll
+		if (pipe2(in, O_NONBLOCK)) return self.statusPages.at(500);
 		fd	out[2];
 		if (pipe2(out, O_NONBLOCK)) {
 			close(in[0]);
 			close(in[1]);
-			return self.statusPages.at(500); // O_NONBLOCK for whenever i put this in epoll
+			return self.statusPages.at(500);
 		}
 
 		const pid_t	pid = fork();

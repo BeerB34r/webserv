@@ -126,6 +126,7 @@ static auto	singleServerFromConfig(const Config& c) -> Maybe<Server> {
 	if (c.values.contains("datadir")) for (const std::string& val : splitOnChar(c.values.at("datadir"), ',')) s.dataDirs.insert(val);
 	if (c.values.contains("maxrequestsize")) s.maxRequestSize = *to_int(c.values.at("maxrequestsize"));
 	if (c.values.contains("maxbodysize")) s.maxBodySize = *to_int(c.values.at("maxbodysize"));
+	if (c.values.contains("cgi-timeout")) s.cgiTimeout = std::chrono::seconds(*to_int(c.values.at("cgi-timeout"))), INFO("cgi timeout: " + std::to_string(s.cgiTimeout.count()));
 	s.root = c.values.at("root").substr(0, c.values.at("root").find(','));
 	s.writeEventHandler = defaultWriteEventHandler;
 	s.readEventHandler = defaultReadEventHandler;
