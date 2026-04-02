@@ -39,6 +39,15 @@
 using namespace std::literals;
 #define DEFAULT_TIMEOUT 30s
 
+typedef struct	process {
+	using fd = int;
+	fd	in, out;
+	bool	clientReady;
+	fd	client;
+	pid_t	pid;
+	std::string	stdinContent, stdoutContent;
+}	Process;
+
 struct Server : public Config {
 	using eventHandler = std::function<bool(Server&, int, struct epoll_event*, struct in_addr)>;
 	short	port;
@@ -50,8 +59,7 @@ struct Server : public Config {
 	std::map<int,std::string>	client_data;
 	std::map<int,HTTPMessage>	statusPages = defaultpage::codePages;
 	std::map<int,HTTPMessage>	responses;
-	std::map<int,pid_t>			hasCallback;
-	std::map<pid_t,std::pair<bool,int>>	callbacks;
+	std::map<int,Process>	hasCallback;
 	std::map<std::string,std::pair<std::string,std::set<HTTPMessage::HTTPMethod>>>	routes;
 	std::set<std::string>	cgiExts;
 	std::set<std::string>	cgiDirs;
@@ -63,6 +71,6 @@ struct Server : public Config {
 };
 
 auto	fromConfig(const Config&) -> std::vector<Server>;
-auto	fulfillRequestTarget(const Server&, HTTPMessage, const std::string&, const std::filesystem::path&, const std::string&, struct in_addr) -> std::variant<std::pair<int,pid_t>,HTTPMessage>;
+auto	fulfillRequestTarget(const Server&, HTTPMessage, const std::string&, const std::filesystem::path&, const std::string&, struct in_addr) -> std::variant<std::pair<int,Process>,HTTPMessage>;
 
 #endif // SERVER_HPP

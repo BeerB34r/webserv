@@ -81,7 +81,7 @@ static inline auto	checkFile(const std::filesystem::path& file, int flag) -> int
 	return 0;
 }
 
-static auto	fulfillGetRequest(const Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<int,pid_t>,HTTPMessage> {
+static auto	fulfillGetRequest(const Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<int,Process>,HTTPMessage> {
 	struct stat statbuf;
 
 	if (int status = checkFile(target, R_OK)) {
@@ -157,7 +157,7 @@ static auto	fulfillDeleteRequest(const Server& self, [[maybe_unused]] const HTTP
 	}
 }
 
-auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<int,pid_t>,HTTPMessage> {
+auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<int,Process>,HTTPMessage> {
 	// make relative to root => make the normal form => check if begins with ..
 	std::string	serverRoot = self.root;
 	for (const std::pair<const std::string, std::pair<std::string,std::set<HTTPMessage::HTTPMethod>>>& p : self.routes) {
@@ -192,7 +192,7 @@ auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::strin
 	}
 }
 
-auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_addr) noexcept -> std::variant<std::pair<int,pid_t>,HTTPMessage> {
+auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_addr) noexcept -> std::variant<std::pair<int,Process>,HTTPMessage> {
 	std::optional<HTTPMessage>	http = readHTTPrequest(self.client_data[ev->data.fd]);
 	if (http && !http->getFields().contains("Host")) return self.statusPages.at(400);
 	std::optional<std::filesystem::path>	target = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
@@ -221,8 +221,8 @@ auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_ad
 auto	defaultWriteEventHandler(Server& self, int pollfd, struct epoll_event* ev, [[maybe_unused]] struct in_addr peer_addr) -> bool {
 	bool	should_close = false;
 	if (self.hasCallback.contains(ev->data.fd)) {
-		pid_t proc = self.hasCallback[ev->data.fd];
-		self.callbacks[proc].first = true;
+		Process& p = self.hasCallback[ev->data.fd];
+		p.clientReady = true;
 		return false;
 	}
 	HTTPMessage	message = self.responses.at(ev->data.fd);
@@ -255,10 +255,10 @@ auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev, s
 		self.client_data[ev->data.fd].append(buf, rv);
 		totalRead += rv;
 		if (totalRead > self.maxRequestSize) break ;
-		http = readHTTPrequest(self.client_data[ev->data.fd]); // inefficient, but like, lets benchmark it first lmao
+		http = readHTTPrequest(self.client_data[ev->data.fd]); // inefficient, but like, lets benchmark it first lmao // its fine
 		if (http && http->getBody().size() > self.maxBodySize) break ;
 	}
-	if (rv < 0) { // assume error is EAGAIN/EWOULDBLOCK, not allowed to check cuz fuck you
+	if (rv < 0) { // assume error is EAGAIN/EWOULDBLOCK, not allowed to check cuz fuck you // should show up in EPOLL_ERR if its bad anyway
 		INFO("end of current message from port " + std::to_string(self.port));
 	}
 	if (totalRead > self.maxRequestSize || (http && http->getBody().size() > self.maxBodySize)) self.responses.insert_or_assign(ev->data.fd, self.statusPages.at(413));
@@ -266,13 +266,32 @@ auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev, s
 		// varaint containing either:
 		// A => HTTP response
 		// B => callback that returns a response, and the read-end of a pipe containing a CGI process (for epoll)
-		std::variant<std::pair<int,pid_t>,HTTPMessage>	requestResult = fulfillRequest(self, ev, peer_addr);
+		std::variant<std::pair<int,Process>,HTTPMessage>	requestResult = fulfillRequest(self, ev, peer_addr);
 		if (std::holds_alternative<HTTPMessage>(requestResult)) self.responses.insert_or_assign(ev->data.fd, std::get<HTTPMessage>(requestResult));
 		else {
-			auto [ output , proc ] = std::get<std::pair<int,pid_t>>(requestResult);
+			auto [ output , proc ] = std::get<std::pair<int,Process>>(requestResult);
+			proc.client = ev->data.fd;
 			self.hasCallback[ev->data.fd] = proc;
-			self.callbacks[proc] = std::make_pair(false, output);
-			// prepare callback
+			struct epoll_event	proc_ev;
+			proc_ev.data.fd = proc.in;
+			proc_ev.events = EPOLLOUT | EPOLLET | EPOLLONESHOT;
+			if (epoll_ctl(pollfd, EPOLL_CTL_ADD, proc_ev.data.fd, &proc_ev)) {
+				self.responses.insert_or_assign(ev->data.fd, self.statusPages.at(500));
+				kill(proc.pid, SIGKILL);
+				close(proc.in);
+				close(proc.out);
+			}
+			else {
+				proc_ev.data.fd = proc.out;
+				proc_ev.events = EPOLLIN | EPOLLET;
+				if (epoll_ctl(pollfd, EPOLL_CTL_ADD, proc_ev.data.fd, &proc_ev)) {
+					self.responses.insert_or_assign(ev->data.fd, self.statusPages.at(500));
+					kill(proc.pid, SIGKILL);
+					close(proc.in);
+					close(proc.out);
+				}
+			}
+
 		}
 	}
 	if (rv == 0) { // end of communication
@@ -405,6 +424,7 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 	int message_count = 0;
 	std::map<fd,Server>		sockToServer;
 	std::map<fd,struct in_addr>	sockToAddr;
+	std::map<fd,Process>	procFds;
 	while (!stop || server_rv) {
 		int	nfds = epoll_wait(pollfd, events, MAX_EVENTS, 0);
 		for (int n = 0; n < nfds; n++) {
@@ -426,70 +446,203 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 				sockToServer[connection_socket] = listeners[socket];
 				sockToAddr[connection_socket] = peer_addr;
 				INFO("opened connection on port " + std::to_string(listeners[socket].port));
+			} else if (procFds.contains(socket)) {
+				Server&	serverConfig = sockToServer[procFds[socket].client];
+				Process&	p = serverConfig.hasCallback[procFds[socket].client];
+				auto	doResponse = [p](HTTPMessage http, Server& server, std::map<fd,Server>& sockToServer, std::map<fd,struct in_addr>& sockToAddr, std::map<fd,Process>& procFds) {
+					if (p.clientReady) {
+						std::stringstream	ss;
+						ss << http;
+						std::string	response = ss.str();
+						send(p.client, response.c_str(), response.size(), 0);
+						close(p.client);
+						sockToServer[p.client].hasCallback.erase(p.client);
+						sockToServer.erase(p.client);
+						sockToAddr.erase(p.client);
+						procFds.erase(p.out);
+					} else {
+						server.responses.insert_or_assign(p.client, http);
+						server.hasCallback.erase(p.client);
+						procFds.erase(p.out);
+					}
+				};
+				if (current->events & EPOLLIN) {
+					int rv;
+					char buf[BUFFER_SIZE];
+					do {
+						rv = read(p.out, buf, BUFFER_SIZE);
+						if (rv < 0) break ;
+						p.stdoutContent.append(buf, rv);
+					} while (rv > 0);
+					if (rv == 0){
+						INFO("cgi finished, sending to client");
+						if (p.pid != 0)
+							kill(p.pid, SIGKILL);
+						close(p.out);
+						std::optional<std::pair<std::string,std::vector<std::string>>> parsed = (HTTPparsing::fieldLines < HTTPparsing::crlf)(p.stdoutContent);
+						if (!parsed) {
+							doResponse(serverConfig.statusPages.at(500), serverConfig, sockToServer, sockToAddr, procFds);
+							continue ;
+						}
+						std::vector<std::string>	fieldlines = parsed->second;
+						std::string	status = "";
+						bool	found_status = false, found_length = false;
+						for (size_t i = 0; i < fieldlines.size(); ++i) {
+							if (fieldlines[i].starts_with("Status:")) {
+								status = fieldlines[i].substr(fieldlines[i].find(':') + 1);
+								fieldlines.erase(fieldlines.begin() + i);
+								if (found_status) {
+									doResponse(serverConfig.statusPages.at(500), serverConfig, sockToServer, sockToAddr, procFds);
+									continue ;
+								}
+								found_status = true;
+							} else if (fieldlines[i].starts_with("Content-Length:")) {
+								if (found_length) {
+									doResponse(serverConfig.statusPages.at(500), serverConfig, sockToServer, sockToAddr, procFds);
+									continue ;
+								}
+								found_length = true;
+							}
+						}
+						std::string	body = parsed->first;
+						if (!found_length) fieldlines.push_back("Content-Length: " + std::to_string(body.size()));
+						doResponse(status.empty() ? HTTPMessage("HTTP/1.1 200 OK", fieldlines, body) : HTTPMessage("HTTP/1.1 " + status, fieldlines, body),
+								serverConfig,
+								sockToServer,
+								sockToAddr,
+								procFds);
+					}
+				} else if (current->events & EPOLLOUT) {
+					write(p.in, p.stdinContent.c_str(), p.stdinContent.size());
+					close(p.in);
+					p.in = -1;
+					procFds.erase(p.in);
+				} else if (current->events & EPOLLHUP) {
+					INFO("cgi finished, sending to client");
+					close(p.out);
+					std::optional<std::pair<std::string,std::vector<std::string>>> parsed = (HTTPparsing::fieldLines < HTTPparsing::crlf)(p.stdoutContent);
+					if (!parsed) {
+						doResponse(serverConfig.statusPages.at(500), serverConfig, sockToServer, sockToAddr, procFds);
+						continue ;
+					}
+					std::vector<std::string>	fieldlines = parsed->second;
+					std::string	status = "";
+					bool	found_status = false, found_length = false;
+					for (size_t i = 0; i < fieldlines.size(); ++i) {
+						if (fieldlines[i].starts_with("Status:")) {
+							status = fieldlines[i].substr(fieldlines[i].find(':') + 1);
+							fieldlines.erase(fieldlines.begin() + i);
+							if (found_status) {
+								doResponse(serverConfig.statusPages.at(500), serverConfig, sockToServer, sockToAddr, procFds);
+								continue ;
+							}
+							found_status = true;
+						} else if (fieldlines[i].starts_with("Content-Length:")) {
+							if (found_length) {
+								doResponse(serverConfig.statusPages.at(500), serverConfig, sockToServer, sockToAddr, procFds);
+								continue ;
+							}
+							found_length = true;
+						}
+					}
+					std::string	body = parsed->first;
+					if (!found_length) fieldlines.push_back("Content-Length: " + std::to_string(body.size()));
+					doResponse(status.empty() ? HTTPMessage("HTTP/1.1 200 OK", fieldlines, body) : HTTPMessage("HTTP/1.1 " + status, fieldlines, body),
+							serverConfig,
+							sockToServer,
+							sockToAddr,
+							procFds);
+				} else INFO("some non I/O event happened: " + std::to_string(current->events));
 			} else if (current->events & EPOLLERR) { // error on socket
 					close(socket);
-					Server& server = sockToServer.at(socket);
-					if (server.hasCallback.contains(socket)) {
-						kill(server.hasCallback.at(socket), SIGKILL);
-						server.callbacks.erase(server.hasCallback.at(socket));
-						server.hasCallback.erase(socket);
+					INFO("ERR on fd " + std::to_string(socket) + ", isProc: " + (procFds.contains(socket) ? "true" : "false"));
+					if (sockToServer.contains(socket)) {
+						Server& server = sockToServer.at(socket);
+						if (server.hasCallback.contains(socket)) {
+							server.hasCallback.erase(socket);
+						}
+						sockToServer.erase(socket);
+						sockToAddr.erase(socket);
+					} else {
+						Server&	serverConfig = sockToServer[procFds[socket].client];
+						Process&	p = serverConfig.hasCallback[procFds[socket].client];
+						if (p.in == current->data.fd) {
+							close(p.in);
+							procFds.erase(p.in);
+						} else {
+							auto doResponse = [p](HTTPMessage http, Server& server, std::map<fd,Server>& sockToServer, std::map<fd,struct in_addr>& sockToAddr, std::map<fd,Process>& procFds) {
+								if (p.clientReady) {
+									std::stringstream	ss;
+									ss << http;
+									std::string	response = ss.str();
+									send(p.client, response.c_str(), response.size(), 0);
+									close(p.client);
+									sockToServer.erase(p.client);
+									sockToAddr.erase(p.client);
+									procFds.erase(p.out);
+								} else {
+									server.responses.insert_or_assign(p.client, http);
+									server.hasCallback.erase(p.client);
+									procFds.erase(p.out);
+								}
+							};
+							doResponse(serverConfig.statusPages.at(500), serverConfig, sockToServer, sockToAddr, procFds);
+						}
 					}
-					sockToServer.erase(socket);
-					sockToAddr.erase(socket);
-			} else { // client read/write event
+			} else if (sockToServer.contains(socket) && (current->events & EPOLLIN || current->events & EPOLLOUT)) try { // client read/write event
 				Server&	serverConfig = sockToServer[socket];
 				struct in_addr	peer_addr = sockToAddr[socket];
-				if (current->events & EPOLLIN
+				bool	inputEvent = current->events & EPOLLIN;
+				if (inputEvent
 					? serverConfig.readEventHandler(serverConfig, pollfd, current, peer_addr)
 					: serverConfig.writeEventHandler(serverConfig, pollfd, current, peer_addr)
 					) { // can we pretend that airplanes in the night sky are like shooting stars
 					sockToServer.erase(socket);
 					sockToAddr.erase(socket);
 				}
-				message_count += !(current->events & EPOLLIN);
-			}
-		}
-		// check if child is doing shit
-		for (std::pair<const fd, Server>& a : sockToServer) {
-			Server &s = a.second;
-			if (s.hasCallback.empty()) continue ;
-			for (std::pair<const int, pid_t> p : s.hasCallback) {
-				int	sock = p.first;
-				pid_t proc = p.second;
-				int status;
-				if (int rv = waitpid(proc, &status, WNOHANG) != p.second) {
-					if (rv == 0) continue ; // WNOHANG, child is still running // TODO: timeout
-					if (rv < 0) {
-						s.responses.insert_or_assign(sock, s.statusPages.at(500));
-						s.callbacks.erase(proc);
-						s.hasCallback.erase(sock);
-					}
-				};
-				auto& [ ready, output ]  = s.callbacks[proc];
-				if (!ready) {
-					s.responses.insert_or_assign(sock, cgi::callback(output, s, proc));
-					s.callbacks.erase(proc);
-					s.hasCallback.erase(sock);
-				} else {
-					HTTPMessage http = cgi::callback(output, s, proc);
-					std::stringstream ss;
-					ss << http;
-					std::string response = ss.str();
-					send(sock, response.c_str(), response.size(), 0);
-					sockToServer.erase(sock);
-					sockToAddr.erase(sock);
+				if (inputEvent && sockToServer.contains(socket) && sockToServer[socket].hasCallback.contains(socket)) {
+					Process& p = sockToServer[socket].hasCallback[socket];
+					procFds.insert_or_assign(p.in, p);
+					procFds.insert_or_assign(p.out, p);
 				}
+				message_count += !(current->events & EPOLLIN);
+			} catch (std::exception& e) { INFO( + std::string(e.what()) + ": Client I/O " + (current->events & EPOLLIN ? "EPOLLIN" : "EPOLLOUT"));
+			} else if (current->events & EPOLLHUP) {
+				INFO("EPOLLHUP, erasing client data ");
+				close(socket);
+				if (sockToServer.contains(socket)) {
+					Server&	server = sockToServer[socket];
+					if (server.hasCallback.contains(socket)) {
+						Process p = server.hasCallback[socket];
+						close(p.in);
+						close(p.out);
+						server.hasCallback.erase(socket);
+					}
+				}
+				sockToAddr.erase(socket);
+				sockToServer.erase(socket);
+			} else {
+				INFO ("huh " + std::to_string(current->events));
+				struct stat sbuf = {};
+				fstat(socket, &sbuf);
+				switch (sbuf.st_mode) {
+					case S_IFSOCK: INFO("socket"); break ;
+					case S_IFIFO: INFO("pipe"); break ;
+				}
+				close(socket);
+				sockToAddr.erase(socket);
+				sockToServer.erase(socket);
 			}
 		}
 	}
 	std::signal(SIGINT, originalIntHandler);
 	std::signal(SIGTERM, originalTermHandler);
 	// KILL ALL KIDS
-	for (std::pair<const fd, Server>& a : sockToServer) {
-		Server& s = a.second;
-		if (s.hasCallback.empty()) continue ;
-		for (std::pair<const int, pid_t> p : s.hasCallback) kill(p.second, SIGKILL);
-	}
+	/*for (std::pair<const fd, Server>& a : sockToServer) {*/
+	/*	Server& s = a.second;*/
+	/*	if (s.hasCallback.empty()) continue ;*/
+	/*	for (std::pair<const int, Process> p : s.hasCallback) kill(p.second.pid, SIGKILL);*/
+	/*}*/
 	closeMap(listeners);
 	close(pollfd);
 	INFO(+ std::to_string(message_count) + " messages processed");
