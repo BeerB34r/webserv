@@ -39,6 +39,7 @@
 #include <netinet/ip.h>
 #include <dirent.h>
 #include <sys/wait.h> // waitpid
+#include <fcntl.h>
 
 #include <csignal>		// signal()
 #include <filesystem>	// std::filesystem
@@ -344,7 +345,10 @@ auto	getIncomingConnection(int socket, struct in_addr& peer_addr) noexcept -> in
 	socklen_t	peerAddrSize = sizeof(peer);
 	int	out = accept(socket, reinterpret_cast<struct sockaddr *>(&peer), &peerAddrSize);
 	if (out < 0) WARN("failed to accept incoming traffic");
-	else peer_addr = peer.sin_addr;
+	else {
+		peer_addr = peer.sin_addr;
+		fcntl(out, F_SETFD, fcntl(out, F_GETFD, 0) | FD_CLOEXEC); // make sure it doesnt get duplicated into the cgi
+	}
 	return out;
 }
 
@@ -427,6 +431,10 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 				sockToAddr[connection_socket] = peer_addr;
 				INFO("opened connection on port " + std::to_string(listeners[socket].port));
 			} else if (current->events & EPOLLERR) { // error on socket
+				WARN("ERR thingy");
+				WARN(+ std::string(strerror(current->data.u32)));
+				WARN(+ std::string(strerror(current->data.u64)));
+				WARN(+ std::string(strerror(current->events)));
 				close(socket);
 				Server& server = sockToServer.at(socket);
 				if (server.hasCallback.contains(socket)) {
@@ -436,16 +444,17 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 				}
 				sockToServer.erase(socket);
 				sockToAddr.erase(socket);
-			/*} else if (current->events & EPOLLHUP) {*/
-			/*	close(socket);*/
-			/*	Server& server = sockToServer.at(socket);*/
-			/*	if (server.hasCallback.contains(socket)) {*/
-			/*		kill(server.hasCallback.at(socket), SIGKILL);*/
-			/*		server.callbacks.erase(server.hasCallback.at(socket));*/
-			/*		server.hasCallback.erase(socket);*/
-			/*	}*/
-			/*	sockToServer.erase(socket);*/
-			/*	sockToAddr.erase(socket);*/
+			} else if (current->events & EPOLLHUP) {
+				WARN("EHUP thingy");
+				close(socket);
+				Server& server = sockToServer.at(socket);
+				if (server.hasCallback.contains(socket)) {
+					kill(server.hasCallback.at(socket), SIGKILL);
+					server.callbacks.erase(server.hasCallback.at(socket));
+					server.hasCallback.erase(socket);
+				}
+				sockToServer.erase(socket);
+				sockToAddr.erase(socket);
 			} else { // client read/write event
 				Server&	serverConfig = sockToServer[socket];
 				struct in_addr	peer_addr = sockToAddr[socket];
