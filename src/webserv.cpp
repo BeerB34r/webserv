@@ -427,21 +427,31 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 				sockToAddr[connection_socket] = peer_addr;
 				INFO("opened connection on port " + std::to_string(listeners[socket].port));
 			} else if (current->events & EPOLLERR) { // error on socket
-					close(socket);
-					Server& server = sockToServer.at(socket);
-					if (server.hasCallback.contains(socket)) {
-						kill(server.hasCallback.at(socket), SIGKILL);
-						server.callbacks.erase(server.hasCallback.at(socket));
-						server.hasCallback.erase(socket);
-					}
-					sockToServer.erase(socket);
-					sockToAddr.erase(socket);
+				close(socket);
+				Server& server = sockToServer.at(socket);
+				if (server.hasCallback.contains(socket)) {
+					kill(server.hasCallback.at(socket), SIGKILL);
+					server.callbacks.erase(server.hasCallback.at(socket));
+					server.hasCallback.erase(socket);
+				}
+				sockToServer.erase(socket);
+				sockToAddr.erase(socket);
+			/*} else if (current->events & EPOLLHUP) {*/
+			/*	close(socket);*/
+			/*	Server& server = sockToServer.at(socket);*/
+			/*	if (server.hasCallback.contains(socket)) {*/
+			/*		kill(server.hasCallback.at(socket), SIGKILL);*/
+			/*		server.callbacks.erase(server.hasCallback.at(socket));*/
+			/*		server.hasCallback.erase(socket);*/
+			/*	}*/
+			/*	sockToServer.erase(socket);*/
+			/*	sockToAddr.erase(socket);*/
 			} else { // client read/write event
 				Server&	serverConfig = sockToServer[socket];
 				struct in_addr	peer_addr = sockToAddr[socket];
 				if (current->events & EPOLLIN
-					? serverConfig.readEventHandler(serverConfig, pollfd, current, peer_addr)
-					: serverConfig.writeEventHandler(serverConfig, pollfd, current, peer_addr)
+					? defaultReadEventHandler(serverConfig, pollfd, current, peer_addr)
+					: defaultWriteEventHandler(serverConfig, pollfd, current, peer_addr)
 					) { // can we pretend that airplanes in the night sky are like shooting stars
 					sockToServer.erase(socket);
 					sockToAddr.erase(socket);
