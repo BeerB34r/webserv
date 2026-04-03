@@ -39,6 +39,7 @@
 #include <netinet/ip.h>
 #include <dirent.h>
 #include <sys/wait.h> // waitpid
+#include <fcntl.h>
 
 #include <csignal>		// signal()
 #include <filesystem>	// std::filesystem
@@ -46,6 +47,30 @@
 
 #define PORT 8080
 #define LISTEN_BACKLOG 50
+
+#define _evStr(s, e, m) do {\
+	if (e & m) \
+		s.empty() ? s = #m : s += "|"s + #m;\
+}	while(0)
+static inline auto	epollEventToString(int e) {
+	std::string	rv = "";
+	_evStr(rv, e, EPOLLIN);
+	_evStr(rv, e, EPOLLPRI);
+	_evStr(rv, e, EPOLLOUT);
+	_evStr(rv, e, EPOLLRDNORM);
+	_evStr(rv, e, EPOLLRDBAND);
+	_evStr(rv, e, EPOLLWRNORM);
+	_evStr(rv, e, EPOLLWRBAND);
+	_evStr(rv, e, EPOLLMSG);
+	_evStr(rv, e, EPOLLERR);
+	_evStr(rv, e, EPOLLHUP);
+	_evStr(rv, e, EPOLLRDHUP);
+	_evStr(rv, e, EPOLLEXCLUSIVE);
+	_evStr(rv, e, EPOLLWAKEUP);
+	_evStr(rv, e, EPOLLONESHOT);
+	_evStr(rv, e, EPOLLET);
+	return rv;
+}
 
 static auto	autoIndex(const std::string& request, const std::filesystem::path& dirPath) -> HTTPMessage {
 	std::stringstream	ss;
@@ -225,7 +250,7 @@ auto	defaultWriteEventHandler(Server& self, int pollfd, struct epoll_event* ev, 
 		p.clientReady = true;
 		return false;
 	}
-	HTTPMessage	message = self.responses.at(ev->data.fd);
+	HTTPMessage	message = self.responses.contains(ev->data.fd) ? self.responses.at(ev->data.fd) : self.statusPages.at(500);
 	int	status = std::get<HTTPMessage::ResponseData>(message.getData()).statusCode;
 	if (status > 399 || 200 > status) should_close = true;
 	std::stringstream	ss;
@@ -313,6 +338,7 @@ auto	createSocket(short port, long address = INADDR_ANY) -> int {
 		ERROR("failed to create network socket");
 		return (-1);
 	}
+	fcntl(sock, F_SETFD, fcntl(sock, F_GETFD, 0) | FD_CLOEXEC);
 
 	struct sockaddr_in	addr = {};
 	addr.sin_family = AF_INET;
@@ -362,7 +388,10 @@ auto	getIncomingConnection(int socket, struct in_addr& peer_addr) noexcept -> in
 	struct sockaddr_in	peer;
 	socklen_t	peerAddrSize = sizeof(peer);
 	int	out = accept(socket, reinterpret_cast<struct sockaddr *>(&peer), &peerAddrSize);
-	if (out < 0) WARN("failed to accept incoming traffic");
+	if (out < 0) {
+		WARN("failed to accept incoming traffic");
+		fcntl(out, F_SETFD, fcntl(out, F_GETFD, 0) | FD_CLOEXEC);
+	}
 	else peer_addr = peer.sin_addr;
 	return out;
 }
@@ -589,10 +618,23 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 							doResponse(serverConfig.statusPages.at(500), serverConfig, sockToServer, sockToAddr, procFds);
 						}
 					}
-			} else if (sockToServer.contains(socket) && (current->events & EPOLLIN || current->events & EPOLLOUT)) try { // client read/write event
+			} else if (sockToServer.contains(socket) && (current->events & EPOLLIN || current->events & EPOLLOUT)) { // client read/write event
 				Server&	serverConfig = sockToServer[socket];
 				struct in_addr	peer_addr = sockToAddr[socket];
 				bool	inputEvent = current->events & EPOLLIN;
+				if (!serverConfig.readEventHandler || !serverConfig.writeEventHandler) {
+					INFO ("faulty copy on event: " + epollEventToString(current->events));
+					struct stat sbuf = {};
+					fstat(socket, &sbuf);
+					switch (sbuf.st_mode) {
+						case S_IFSOCK: INFO("socket"); break ;
+						case S_IFIFO: INFO("pipe"); break ;
+					}
+					close(socket);
+					sockToAddr.erase(socket);
+					sockToServer.erase(socket);
+					continue ;
+				}
 				if (inputEvent
 					? serverConfig.readEventHandler(serverConfig, pollfd, current, peer_addr)
 					: serverConfig.writeEventHandler(serverConfig, pollfd, current, peer_addr)
@@ -606,7 +648,6 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 					procFds.insert_or_assign(p.out, p);
 				}
 				message_count += !(current->events & EPOLLIN);
-			} catch (std::exception& e) { INFO( + std::string(e.what()) + ": Client I/O " + (current->events & EPOLLIN ? "EPOLLIN" : "EPOLLOUT"));
 			} else if (current->events & EPOLLHUP) {
 				INFO("EPOLLHUP, erasing client data ");
 				close(socket);
@@ -622,7 +663,7 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 				sockToAddr.erase(socket);
 				sockToServer.erase(socket);
 			} else {
-				INFO ("huh " + std::to_string(current->events));
+				INFO ("weird shit happened while trying to process: " + epollEventToString(current->events));
 				struct stat sbuf = {};
 				fstat(socket, &sbuf);
 				switch (sbuf.st_mode) {
