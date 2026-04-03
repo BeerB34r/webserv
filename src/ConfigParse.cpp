@@ -78,8 +78,8 @@ namespace ConfigParse {
 		= (ows > parseChar('#')
 			> many(parsePredicate([](const char& c) -> bool { return !(c == '\n'); }))
 			< parseChar('\n'))
-		|	ows > parseString("\n")
-		|	many(parseChar(';') | parsePredicate([](const char& c) -> bool { return isspace(c) && c != '\n';})) > parseString("\n");
+		|	(ows > parseString("\n"))
+		|	(many(parseChar(';') | parsePredicate([](const char& c) -> bool { return isspace(c) && c != '\n';})) > parseString("\n"));
 	extern const Parser<Config>			block([](const String& s) noexcept -> Maybe<Pair<String,Config>> {
 			static const Parser<std::variant<Pair<String,String>,Config,String>>	localConfigValue([](const String& s) -> Maybe<Pair<String,std::variant<Pair<String,String>,Config,String>>> {
 				Maybe<Pair<String,String>>				comment = commentLine(s);

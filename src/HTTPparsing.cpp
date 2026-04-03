@@ -78,7 +78,7 @@ namespace HTTPparsing {
 		| parsePredicate(isdigit)
 		| parsePredicate(isalpha);
 	extern const Parser<char>	vchar = parsePredicate([](unsigned char c) -> bool { return (c >= 0x21 && 0x7E >= c) ? true : false; });
-	extern const Parser<char>	obsText = parsePredicate([](unsigned char c) -> bool { return (c >= 0x80 && 0xFF >= c) ? true : false; });
+	extern const Parser<char>	obsText = parsePredicate([](unsigned char c) -> bool { return (c >= 0x80) ? true : false; });
 	extern const Parser<char>	fieldVchar = vchar | obsText;
 	extern const Parser<String>	ows = many(parseAnyOf({' ', '\t'})); // optional whitespace
 	extern const Parser<String>	rws = some(parseAnyOf({' ', '\t'})); // required whitespace

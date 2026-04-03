@@ -193,7 +193,8 @@ auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::strin
 }
 
 auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_addr) noexcept -> std::variant<std::pair<int,pid_t>,HTTPMessage> {
-	std::optional<HTTPMessage>	http = readHTTPrequest(self.client_data[ev->data.fd]);
+	Server::Client&	client = self.clients[ev->data.fd];
+	std::optional<HTTPMessage>	http = readHTTPrequest(client.data);
 	if (http && !http->getFields().contains("Host")) return self.statusPages.at(400);
 	std::optional<std::filesystem::path>	target = http.and_then([](const HTTPMessage& m) -> std::optional<std::string> {
 			return HTTPparsing::originForm(std::get<HTTPMessage::RequestData>(m.getData()).requestTarget).transform([](auto p) -> std::string { return p.second;});
@@ -219,67 +220,64 @@ auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_ad
 }
 
 auto	defaultWriteEventHandler(Server& self, int pollfd, struct epoll_event* ev, [[maybe_unused]] struct in_addr peer_addr) -> bool {
+	Server::Client&	client = self.clients[ev->data.fd];
 	bool	should_close = false;
-	if (self.hasCallback.contains(ev->data.fd)) {
-		pid_t proc = self.hasCallback[ev->data.fd];
-		self.callbacks[proc].first = true;
+	if (client.cgi) {
+		client.cgi->clientReady = true;
 		return false;
 	}
-	HTTPMessage	message = self.responses.at(ev->data.fd);
+	HTTPMessage	message = client.response.value();
 	int	status = std::get<HTTPMessage::ResponseData>(message.getData()).statusCode;
 	if (status > 399 || 200 > status) should_close = true;
 	std::stringstream	ss;
 	ss << message;
 	std::string			response = ss.str();
-	send(ev->data.fd, response.c_str(), response.length(), 0);
-	self.client_data[ev->data.fd] = "";
-	self.responses.erase(ev->data.fd);
+	send(client.sock, response.c_str(), response.length(), 0);
+	client.data = "";
+	client.response = std::nullopt;
 	if (should_close) {
-		close(ev->data.fd);
-		self.client_data.erase(ev->data.fd);
+		close(client.sock);
 	} else {
 		ev->events = EPOLLIN | EPOLLET;
-		epoll_ctl(pollfd, EPOLL_CTL_MOD, ev->data.fd, ev);
+		epoll_ctl(pollfd, EPOLL_CTL_MOD, client.sock, ev);
 	}
 	INFO("request from port " + std::to_string(self.port) + " fulfilled");
 	return (should_close);
 }
 
 auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev, struct in_addr peer_addr) -> bool {
-	char	buf[BUFFER_SIZE];
+	Server::Client&	client = self.clients[ev->data.fd];
+	std::array<char, BUFFER_SIZE>	buf;
 	int rv;
-	size_t	readAmount = BUFFER_SIZE;
 	size_t	totalRead = 0;
 	std::optional<HTTPMessage>	http = std::nullopt;
-	while ((rv = recv(ev->data.fd, buf, readAmount, MSG_DONTWAIT)) > 0) {
-		self.client_data[ev->data.fd].append(buf, rv);
+	while ((rv = recv(ev->data.fd, buf.data(), buf.max_size(), MSG_DONTWAIT)) > 0) {
+		client.data.append(buf.data(), rv);
 		totalRead += rv;
 		if (totalRead > self.maxRequestSize) break ;
-		http = readHTTPrequest(self.client_data[ev->data.fd]); // inefficient, but like, lets benchmark it first lmao
+		http = readHTTPrequest(client.data); // inefficient, but like, lets benchmark it first lmao // its fine
 		if (http && http->getBody().size() > self.maxBodySize) break ;
 	}
 	if (rv < 0) { // assume error is EAGAIN/EWOULDBLOCK, not allowed to check cuz fuck you
 		INFO("end of current message from port " + std::to_string(self.port));
 	}
-	if (totalRead > self.maxRequestSize || (http && http->getBody().size() > self.maxBodySize)) self.responses.insert_or_assign(ev->data.fd, self.statusPages.at(413));
+	if (totalRead > self.maxRequestSize || (http && http->getBody().size() > self.maxBodySize)) client.response = self.statusPages.at(413);
 	else {
 		// varaint containing either:
 		// A => HTTP response
 		// B => callback that returns a response, and the read-end of a pipe containing a CGI process (for epoll)
 		std::variant<std::pair<int,pid_t>,HTTPMessage>	requestResult = fulfillRequest(self, ev, peer_addr);
-		if (std::holds_alternative<HTTPMessage>(requestResult)) self.responses.insert_or_assign(ev->data.fd, std::get<HTTPMessage>(requestResult));
+		if (std::holds_alternative<HTTPMessage>(requestResult)) client.response = std::get<HTTPMessage>(requestResult);
 		else {
 			auto [ output , proc ] = std::get<std::pair<int,pid_t>>(requestResult);
-			self.hasCallback[ev->data.fd] = proc;
-			self.callbacks[proc] = std::make_pair(false, output);
+			client.cgi = Server::Cgi({.pid = proc, .out = output, });
 			// prepare callback
 		}
 	}
 	if (rv == 0) { // end of communication
 		INFO("connection closed on port " + std::to_string(self.port));
 		close(ev->data.fd);
-		self.client_data.erase(ev->data.fd);
-		self.responses.erase(ev->data.fd);
+		self.clients.erase(ev->data.fd);
 		return (true);
 	}
 	ev->events = EPOLLOUT | EPOLLET;
@@ -355,6 +353,13 @@ auto	intHandler([[maybe_unused]] int signum) noexcept -> void {
 	INFO("SIGINT recieved, exiting gracefully");
 }
 
+static inline auto	getServer(std::map<int,Server>&	servers, int fd) noexcept -> Server& {
+	for (std::pair<const int, Server> &p : servers) {
+		if (p.second.clients.contains(fd)) return p.second;
+	}
+	std::unreachable();
+}
+
 static auto	closeMap(std::map<int,Server>&	fds) noexcept -> void {
 	for (auto fd : fds) close(fd.first);
 }
@@ -363,22 +368,24 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 	using namespace std::literals;
 	using fd = int;
 	int	server_rv = 0;
+	struct epoll_event	ev;
 
-	// set up network sockets
 	std::map<fd,Server>	listeners;
-	INFO("server count: " + std::to_string(servers.size()));
-	for (const Server& s : servers) {
-		const fd	sock = createSocket(s.port, s.address);
-		if (sock < 0) continue ;
-		listeners[sock] = s;
+	{ // set up network sockets
+		INFO("server count: " + std::to_string(servers.size()));
+		for (const Server& s : servers) {
+			const fd	sock = createSocket(s.port, s.address);
+			if (sock < 0) continue ;
+			listeners[sock] = s;
+		}
+		if (listeners.empty()) {
+			FATAL("Failed to instantiate any listening sockets");
+			return (1); // cuz you only need the light when its burnin low
+		}
+		INFO("listener count: " + std::to_string(listeners.size()));
 	}
-	if (listeners.empty()) {
-		FATAL("Failed to instantiate any listening sockets");
-		return (1); // cuz you only need the light when its burnin low
-	}
-	INFO("listener count: " + std::to_string(listeners.size()));
+	std::function<Server&(fd)>	sockToServer = [&listeners](fd sock) -> Server& { return getServer(listeners, sock); };
 
-	// set up epoll
 	struct epoll_event	events[MAX_EVENTS];
 	const fd	pollfd = epoll_create1(0); // passenger riff
 	if (pollfd < 0) {
@@ -387,9 +394,7 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 		return (1);
 	}
 
-	// add the listening sockets into epoll
-	struct epoll_event	ev;
-	for (std::pair<const fd,Server> sock : listeners) {
+	for (std::pair<const fd,Server> sock : listeners) {// add the listening sockets into epoll
 		ev.events = EPOLLIN;
 		ev.data.fd = sock.first;
 		if (epoll_ctl(pollfd, EPOLL_CTL_ADD, sock.first, &ev) < 0) {
@@ -403,8 +408,6 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 	__sighandler_t	originalIntHandler = std::signal(SIGINT, intHandler);
 	__sighandler_t	originalTermHandler = std::signal(SIGTERM, intHandler);
 	int message_count = 0;
-	std::map<fd,Server>		sockToServer;
-	std::map<fd,struct in_addr>	sockToAddr;
 	while (!stop || server_rv) {
 		int	nfds = epoll_wait(pollfd, events, MAX_EVENTS, 0);
 		for (int n = 0; n < nfds; n++) {
@@ -423,82 +426,85 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 					server_rv = 1;
 					break ;
 				}
-				sockToServer[connection_socket] = listeners[socket];
-				sockToAddr[connection_socket] = peer_addr;
+				listeners[socket].clients.insert_or_assign(connection_socket, Server::Client({
+						.sock = connection_socket,
+						.addr = peer_addr
+						}));
 				INFO("opened connection on port " + std::to_string(listeners[socket].port));
 			} else if (current->events & EPOLLERR) { // error on socket
 				close(socket);
-				Server& server = sockToServer.at(socket);
-				if (server.hasCallback.contains(socket)) {
-					kill(server.hasCallback.at(socket), SIGKILL);
-					server.callbacks.erase(server.hasCallback.at(socket));
-					server.hasCallback.erase(socket);
+				Server& server = sockToServer(socket);
+				Server::Client&	client = server.clients[socket];
+				if (client.cgi) {
+					kill(client.cgi->pid, SIGKILL);
+					close(client.cgi->in);
+					close(client.cgi->out);
 				}
-				sockToServer.erase(socket);
-				sockToAddr.erase(socket);
-			/*} else if (current->events & EPOLLHUP) {*/
-			/*	close(socket);*/
-			/*	Server& server = sockToServer.at(socket);*/
-			/*	if (server.hasCallback.contains(socket)) {*/
-			/*		kill(server.hasCallback.at(socket), SIGKILL);*/
-			/*		server.callbacks.erase(server.hasCallback.at(socket));*/
-			/*		server.hasCallback.erase(socket);*/
-			/*	}*/
-			/*	sockToServer.erase(socket);*/
-			/*	sockToAddr.erase(socket);*/
+				server.clients.erase(socket);
+			} else if (current->events & EPOLLHUP) {
+				close(socket);
+				Server& server = sockToServer(socket);
+				Server::Client&	client = server.clients[socket];
+				if (client.cgi) {
+					kill(client.cgi->pid, SIGKILL);
+					close(client.cgi->in);
+					close(client.cgi->out);
+				}
+				server.clients.erase(socket);
 			} else { // client read/write event
-				Server&	serverConfig = sockToServer[socket];
-				struct in_addr	peer_addr = sockToAddr[socket];
+				Server&	server = sockToServer(socket);
+				Server::Client&	client = server.clients[socket];
 				if (current->events & EPOLLIN
-					? defaultReadEventHandler(serverConfig, pollfd, current, peer_addr)
-					: defaultWriteEventHandler(serverConfig, pollfd, current, peer_addr)
+					? defaultReadEventHandler(server, pollfd, current, client.addr)
+					: defaultWriteEventHandler(server, pollfd, current, client.addr)
 					) { // can we pretend that airplanes in the night sky are like shooting stars
-					sockToServer.erase(socket);
-					sockToAddr.erase(socket);
+					server.clients.erase(socket);
 				}
 				message_count += !(current->events & EPOLLIN);
 			}
 		}
 		// check if child is doing shit
-		for (std::pair<const fd, Server>& a : sockToServer) {
-			Server &s = a.second;
-			if (s.hasCallback.empty()) continue ;
-			for (std::pair<const int, pid_t> p : s.hasCallback) {
-				int	sock = p.first;
-				pid_t proc = p.second;
-				int status;
-				if (int rv = waitpid(proc, &status, WNOHANG) != p.second) {
-					if (rv == 0) continue ; // WNOHANG, child is still running // TODO: timeout
-					if (rv < 0) {
-						s.responses.insert_or_assign(sock, s.statusPages.at(500));
-						s.callbacks.erase(proc);
-						s.hasCallback.erase(sock);
-					}
-				};
-				auto& [ ready, output ]  = s.callbacks[proc];
-				if (!ready) {
-					s.responses.insert_or_assign(sock, cgi::callback(output, s, proc));
-					s.callbacks.erase(proc);
-					s.hasCallback.erase(sock);
-				} else {
-					HTTPMessage http = cgi::callback(output, s, proc);
-					std::stringstream ss;
-					ss << http;
-					std::string response = ss.str();
-					send(sock, response.c_str(), response.size(), 0);
-					sockToServer.erase(sock);
-					sockToAddr.erase(sock);
+		for (auto& s : listeners) for (auto& c : s.second.clients) {
+			Server&			server = s.second;
+			Server::Client&	client = c.second;
+			if (!client.cgi) continue ;
+			Server::Cgi& cgi = client.cgi.value();
+			int status;
+			if (int rv = waitpid(cgi.pid, &status, WNOHANG) != cgi.pid) {
+				if (rv == 0) continue ; // WNOHANG, child is still running
+				if (rv < 0) {
+					client.response = server.statusPages.at(500);
+					close(client.cgi->in);
+					close(client.cgi->out);
+					client.cgi = std::nullopt;
+					continue ;
 				}
+			};
+			if (!cgi.clientReady) {
+				client.response = cgi::callback(cgi.out, server, cgi.pid);
+				client.cgi = std::nullopt;
+			} else {
+				HTTPMessage http = cgi::callback(cgi.out, server, cgi.pid);
+				std::stringstream ss;
+				ss << http;
+				std::string response = ss.str();
+				send(client.sock, response.c_str(), response.size(), 0);
+				close(client.sock);
+				server.clients.erase(client.sock);
 			}
 		}
 	}
 	std::signal(SIGINT, originalIntHandler);
 	std::signal(SIGTERM, originalTermHandler);
 	// KILL ALL KIDS
-	for (std::pair<const fd, Server>& a : sockToServer) {
-		Server& s = a.second;
-		if (s.hasCallback.empty()) continue ;
-		for (std::pair<const int, pid_t> p : s.hasCallback) kill(p.second, SIGKILL);
+	for (auto& s : listeners) for (auto& c : s.second.clients) {
+		Server::Client&	client = c.second;
+		if (!client.cgi) continue ;
+		Server::Cgi&	cgi = client.cgi.value();
+		kill(cgi.pid, SIGKILL);
+		close(cgi.in);
+		close(cgi.out);
+		close(client.sock);
 	}
 	closeMap(listeners);
 	close(pollfd);
