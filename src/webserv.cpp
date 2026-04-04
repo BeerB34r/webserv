@@ -47,6 +47,31 @@
 #define PORT 8080
 #define LISTEN_BACKLOG 50
 
+#define _evs(s, e, m) do { \
+	if (e & m) \
+		s.empty() ? s = #m : s += "|"s + #m; \
+} while (0)
+
+static inline auto	evToString(int e) -> std::string {
+	std::string	rv = "";
+	_evs(rv, e, EPOLLIN);
+	_evs(rv, e, EPOLLPRI);
+	_evs(rv, e, EPOLLOUT);
+	_evs(rv, e, EPOLLRDNORM);
+	_evs(rv, e, EPOLLRDBAND);
+	_evs(rv, e, EPOLLWRNORM);
+	_evs(rv, e, EPOLLWRBAND);
+	_evs(rv, e, EPOLLMSG);
+	_evs(rv, e, EPOLLERR);
+	_evs(rv, e, EPOLLHUP);
+	_evs(rv, e, EPOLLRDHUP);
+	_evs(rv, e, EPOLLEXCLUSIVE);
+	_evs(rv, e, EPOLLWAKEUP);
+	_evs(rv, e, EPOLLONESHOT);
+	_evs(rv, e, EPOLLET);
+	return rv;
+}
+
 static auto	autoIndex(const std::string& request, const std::filesystem::path& dirPath) -> HTTPMessage {
 	std::stringstream	ss;
 	ss << 
@@ -364,6 +389,12 @@ static auto	closeMap(std::map<int,Server>&	fds) noexcept -> void {
 	for (auto fd : fds) close(fd.first);
 }
 
+static inline auto	collapseEvents(int e) {
+	int	shift = 0;
+	while (e >> (shift + 1)) ++shift;
+	return (e >> shift) << shift;
+}
+
 static inline auto	addNewClient(struct epoll_event ev, int pollfd, std::map<int,Server>& listeners, std::set<int>& clients) -> bool {
 	using fd = int;
 	fd	socket = ev.data.fd;
@@ -385,9 +416,11 @@ static inline auto	addNewClient(struct epoll_event ev, int pollfd, std::map<int,
 	INFO("opened connection on port " + std::to_string(listeners[socket].port));
 	return false;
 }
+
 static inline auto	handleServerEvent(struct epoll_event *current, int pollfd, std::map<int,Server>& listeners, std::set<int>& clients, std::set<int>& procs) -> bool {
+	int	events = current->events;
 	(void)procs;
-	switch (current->events) {
+	switch (collapseEvents(events)) {
 		case (EPOLLERR): {
 			return false ;
 		}
@@ -399,40 +432,18 @@ static inline auto	handleServerEvent(struct epoll_event *current, int pollfd, st
 			return false ;
 		}
 		default: {
-			WARN("unknown event on client socket");
+			WARN("unhandled event on server socket: " + evToString(current->events));
 			return false ;
 		}
 	}
 }
-static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Server& server, std::set<int> clients, std::set<int> procs) -> void {
-	(void)current;
-	(void)pollfd;
-	(void)server;
-	(void)clients;
-	(void)procs;
-	switch (current->events) {
-		case (EPOLLERR): {
-			return ;
-		}
-		case (EPOLLHUP): {
-			return ;
-		}
-		case (EPOLLIN): {
-			return ;
-		}
-		case (EPOLLOUT): {
-			return ;
-		}
-		default: {
-			 return ;
-		}
-	}
-}
+
 static inline auto	handleClientEvent(struct epoll_event *current, int pollfd, int& message_count, Server& server, std::set<int> clients, std::set<int> procs) -> void {
 	using fd = int;
 	fd	socket = current->data.fd;
+	int	events = current->events;
 	Server::Client&	client = server.clients[socket];
-	switch (current->events) {
+	switch (collapseEvents(events)) {
 		case (EPOLLERR): {
 			close(socket);
 			if (client.cgi) {
@@ -475,7 +486,35 @@ static inline auto	handleClientEvent(struct epoll_event *current, int pollfd, in
 			return ;
 		}
 		default: {
-			WARN("unknown event on client socket");
+			WARN("unhandled event on client pipe: " + evToString(current->events));
+			return ;
+		}
+	}
+}
+
+static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Server& server, std::set<int> clients, std::set<int> procs) -> void {
+	using fd = int;
+	[[maybe_unused]] fd	socket = current->data.fd;
+	int	events = current->events;
+	(void)pollfd;
+	(void)server;
+	(void)clients;
+	(void)procs;
+	switch (collapseEvents(events)) {
+		case (EPOLLERR): {
+			return ;
+		}
+		case (EPOLLHUP): {
+			return ;
+		}
+		case (EPOLLIN): {
+			return ;
+		}
+		case (EPOLLOUT): {
+			return ;
+		}
+		default: {
+			WARN("unhandled event on process pipe: " + evToString(current->events));
 			return ;
 		}
 	}
@@ -526,8 +565,8 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 	__sighandler_t	originalIntHandler = std::signal(SIGINT, intHandler);
 	__sighandler_t	originalTermHandler = std::signal(SIGTERM, intHandler);
 	int message_count = 0;
-	std::set<fd>	clients;
-	std::set<fd>	procs;
+	std::set<fd>	clients{};
+	std::set<fd>	procs{};
 	while (!stop || server_rv) {
 		int	nfds = epoll_wait(pollfd, events, MAX_EVENTS, 0);
 		for (int n = 0; n < nfds; n++) {
