@@ -364,11 +364,130 @@ static auto	closeMap(std::map<int,Server>&	fds) noexcept -> void {
 	for (auto fd : fds) close(fd.first);
 }
 
+static inline auto	addNewClient(struct epoll_event ev, int pollfd, std::map<int,Server>& listeners, std::set<int>& clients) -> bool {
+	using fd = int;
+	fd	socket = ev.data.fd;
+	struct in_addr peer_addr;
+	fd	connection_socket = getIncomingConnection(socket, peer_addr);
+	if (connection_socket < 0) return false;
+	ev.events = EPOLLIN | EPOLLET;
+	ev.data.fd = connection_socket;
+	if (epoll_ctl(pollfd, EPOLL_CTL_ADD, connection_socket, &ev) < 0) {
+		FATAL("failed to add incoming connection to epoll instance");
+		close(connection_socket); // only know you love her when you let her go
+		return true;
+	}
+	listeners[socket].clients.insert_or_assign(connection_socket, Server::Client({
+			.sock = connection_socket,
+			.addr = peer_addr
+			}));
+	clients.insert(connection_socket);
+	INFO("opened connection on port " + std::to_string(listeners[socket].port));
+	return false;
+}
+static inline auto	handleServerEvent(struct epoll_event *current, int pollfd, std::map<int,Server>& listeners, std::set<int>& clients, std::set<int>& procs) -> bool {
+	(void)procs;
+	switch (current->events) {
+		case (EPOLLERR): {
+			break ;
+		}
+		case (EPOLLHUP): {
+			break ;
+		}
+		case (EPOLLIN): {
+			if (addNewClient(*current, pollfd, listeners, clients)) return true;
+			break ;
+		}
+		default: {
+			WARN("unknown event on client socket");
+			break ;
+		}
+	}
+	return false;
+}
+static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Server& server, std::set<int> clients, std::set<int> procs) -> void {
+	(void)current;
+	(void)pollfd;
+	(void)server;
+	(void)clients;
+	(void)procs;
+	switch (current->events) {
+		case (EPOLLERR): {
+			break ;
+		}
+		case (EPOLLHUP): {
+			break ;
+		}
+		case (EPOLLIN): {
+			break ;
+		}
+		case (EPOLLOUT): {
+			break ;
+		}
+		default: {
+			break ;
+		}
+	}
+}
+static inline auto	handleClientEvent(struct epoll_event *current, int pollfd, int& message_count, Server& server, std::set<int> clients, std::set<int> procs) -> void {
+	using fd = int;
+	fd	socket = current->data.fd;
+	Server::Client&	client = server.clients[socket];
+	switch (current->events) {
+		case (EPOLLERR): {
+			close(socket);
+			if (client.cgi) {
+				kill(client.cgi->pid, SIGKILL);
+				close(client.cgi->in);
+				close(client.cgi->out);
+				procs.erase(client.cgi->in);
+				procs.erase(client.cgi->out);
+			}
+			server.clients.erase(socket);
+			clients.erase(socket);
+			break ;
+		}
+		case (EPOLLHUP): {
+			close(socket);
+			if (client.cgi) {
+				kill(client.cgi->pid, SIGKILL);
+				close(client.cgi->in);
+				close(client.cgi->out);
+				procs.erase(client.cgi->in);
+				procs.erase(client.cgi->out);
+			}
+			server.clients.erase(socket);
+			clients.erase(socket);
+			break ;
+		}
+		case (EPOLLIN): {
+			if (defaultReadEventHandler(server, pollfd, current, client.addr)) {
+				server.clients.erase(socket);
+				clients.erase(socket);
+			}
+			message_count += !(current->events & EPOLLIN);
+			break ;
+		}
+		case (EPOLLOUT): {
+			if (defaultWriteEventHandler(server, pollfd, current, client.addr)) {
+				server.clients.erase(socket);
+				clients.erase(socket);
+			}
+			break ;
+		}
+		default: {
+			WARN("unknown event on client socket");
+			break ;
+		}
+	}
+}
+
 auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 	using namespace std::literals;
 	using fd = int;
 	int	server_rv = 0;
 	struct epoll_event	ev;
+	struct epoll_event	events[MAX_EVENTS];
 
 	std::map<fd,Server>	listeners;
 	{ // set up network sockets
@@ -384,9 +503,8 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 		}
 		INFO("listener count: " + std::to_string(listeners.size()));
 	}
-	std::function<Server&(fd)>	sockToServer = [&listeners](fd sock) -> Server& { return getServer(listeners, sock); };
+	std::function<Server&(fd)>	sockToServer = [&listeners](fd sock) noexcept -> Server& { return getServer(listeners, sock); };
 
-	struct epoll_event	events[MAX_EVENTS];
 	const fd	pollfd = epoll_create1(0); // passenger riff
 	if (pollfd < 0) {
 		FATAL("failed to create epoll instance");
@@ -394,10 +512,11 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 		return (1);
 	}
 
-	for (std::pair<const fd,Server> sock : listeners) {// add the listening sockets into epoll
+	for (std::pair<const fd,Server> p : listeners) {// add the listening sockets into epoll
+		const fd	sock = p.first;
 		ev.events = EPOLLIN;
-		ev.data.fd = sock.first;
-		if (epoll_ctl(pollfd, EPOLL_CTL_ADD, sock.first, &ev) < 0) {
+		ev.data.fd = sock;
+		if (epoll_ctl(pollfd, EPOLL_CTL_ADD, sock, &ev) < 0) {
 			FATAL("failed to add network socket into epoll instance");
 			close(pollfd); // only miss the sun when it starts to snow
 			closeMap(listeners);
@@ -408,59 +527,22 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 	__sighandler_t	originalIntHandler = std::signal(SIGINT, intHandler);
 	__sighandler_t	originalTermHandler = std::signal(SIGTERM, intHandler);
 	int message_count = 0;
+	std::set<fd>	clients;
+	std::set<fd>	procs;
 	while (!stop || server_rv) {
 		int	nfds = epoll_wait(pollfd, events, MAX_EVENTS, 0);
 		for (int n = 0; n < nfds; n++) {
 			struct epoll_event	*current = &events[n];
 			int	socket = current->data.fd;
-
-			if (listeners.contains(socket)) { // new connection
-				struct in_addr peer_addr;
-				fd	connection_socket = getIncomingConnection(socket, peer_addr);
-				if (connection_socket < 0) continue ;
-				ev.events = EPOLLIN | EPOLLET;
-				ev.data.fd = connection_socket;
-				if (epoll_ctl(pollfd, EPOLL_CTL_ADD, connection_socket, &ev) < 0) {
-					FATAL("failed to add incoming connection to epoll instance");
-					close(connection_socket); // only know you love her when you let her go
+			if (listeners.contains(socket)) {
+				if (handleServerEvent(current, pollfd, listeners, clients, procs)) {
 					server_rv = 1;
 					break ;
 				}
-				listeners[socket].clients.insert_or_assign(connection_socket, Server::Client({
-						.sock = connection_socket,
-						.addr = peer_addr
-						}));
-				INFO("opened connection on port " + std::to_string(listeners[socket].port));
-			} else if (current->events & EPOLLERR) { // error on socket
-				close(socket);
-				Server& server = sockToServer(socket);
-				Server::Client&	client = server.clients[socket];
-				if (client.cgi) {
-					kill(client.cgi->pid, SIGKILL);
-					close(client.cgi->in);
-					close(client.cgi->out);
-				}
-				server.clients.erase(socket);
-			} else if (current->events & EPOLLHUP) {
-				close(socket);
-				Server& server = sockToServer(socket);
-				Server::Client&	client = server.clients[socket];
-				if (client.cgi) {
-					kill(client.cgi->pid, SIGKILL);
-					close(client.cgi->in);
-					close(client.cgi->out);
-				}
-				server.clients.erase(socket);
-			} else { // client read/write event
-				Server&	server = sockToServer(socket);
-				Server::Client&	client = server.clients[socket];
-				if (current->events & EPOLLIN
-					? defaultReadEventHandler(server, pollfd, current, client.addr)
-					: defaultWriteEventHandler(server, pollfd, current, client.addr)
-					) { // can we pretend that airplanes in the night sky are like shooting stars
-					server.clients.erase(socket);
-				}
-				message_count += !(current->events & EPOLLIN);
+			} else if (clients.contains(socket)) handleClientEvent(current, pollfd, message_count, sockToServer(socket), clients, procs);
+			else if (procs.contains(socket)) handleProcEvent(current, pollfd, sockToServer(socket), clients, procs);
+			else {
+				WARN("unknown fd on the loose");
 			}
 		}
 		// check if child is doing shit
@@ -476,12 +558,16 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 					client.response = server.statusPages.at(500);
 					close(client.cgi->in);
 					close(client.cgi->out);
+					procs.erase(client.cgi->in);
+					procs.erase(client.cgi->out);
 					client.cgi = std::nullopt;
 					continue ;
 				}
 			};
 			if (!cgi.clientReady) {
 				client.response = cgi::callback(cgi.out, server, cgi.pid);
+				procs.erase(client.cgi->in);
+				procs.erase(client.cgi->out);
 				client.cgi = std::nullopt;
 			} else {
 				HTTPMessage http = cgi::callback(cgi.out, server, cgi.pid);
@@ -490,6 +576,9 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 				std::string response = ss.str();
 				send(client.sock, response.c_str(), response.size(), 0);
 				close(client.sock);
+				clients.erase(client.sock);
+				procs.erase(client.cgi->in);
+				procs.erase(client.cgi->out);
 				server.clients.erase(client.sock);
 			}
 		}
