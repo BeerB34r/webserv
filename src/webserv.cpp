@@ -389,21 +389,20 @@ static inline auto	handleServerEvent(struct epoll_event *current, int pollfd, st
 	(void)procs;
 	switch (current->events) {
 		case (EPOLLERR): {
-			break ;
+			return false ;
 		}
 		case (EPOLLHUP): {
-			break ;
+			return false ;
 		}
 		case (EPOLLIN): {
 			if (addNewClient(*current, pollfd, listeners, clients)) return true;
-			break ;
+			return false ;
 		}
 		default: {
 			WARN("unknown event on client socket");
-			break ;
+			return false ;
 		}
 	}
-	return false;
 }
 static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Server& server, std::set<int> clients, std::set<int> procs) -> void {
 	(void)current;
@@ -413,19 +412,19 @@ static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Serv
 	(void)procs;
 	switch (current->events) {
 		case (EPOLLERR): {
-			break ;
+			return ;
 		}
 		case (EPOLLHUP): {
-			break ;
+			return ;
 		}
 		case (EPOLLIN): {
-			break ;
+			return ;
 		}
 		case (EPOLLOUT): {
-			break ;
+			return ;
 		}
 		default: {
-			break ;
+			 return ;
 		}
 	}
 }
@@ -445,7 +444,7 @@ static inline auto	handleClientEvent(struct epoll_event *current, int pollfd, in
 			}
 			server.clients.erase(socket);
 			clients.erase(socket);
-			break ;
+			return ;
 		}
 		case (EPOLLHUP): {
 			close(socket);
@@ -458,7 +457,7 @@ static inline auto	handleClientEvent(struct epoll_event *current, int pollfd, in
 			}
 			server.clients.erase(socket);
 			clients.erase(socket);
-			break ;
+			return ;
 		}
 		case (EPOLLIN): {
 			if (defaultReadEventHandler(server, pollfd, current, client.addr)) {
@@ -466,18 +465,18 @@ static inline auto	handleClientEvent(struct epoll_event *current, int pollfd, in
 				clients.erase(socket);
 			}
 			message_count += !(current->events & EPOLLIN);
-			break ;
+			return ;
 		}
 		case (EPOLLOUT): {
 			if (defaultWriteEventHandler(server, pollfd, current, client.addr)) {
 				server.clients.erase(socket);
 				clients.erase(socket);
 			}
-			break ;
+			return ;
 		}
 		default: {
 			WARN("unknown event on client socket");
-			break ;
+			return ;
 		}
 	}
 }
@@ -539,8 +538,10 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 					server_rv = 1;
 					break ;
 				}
-			} else if (clients.contains(socket)) handleClientEvent(current, pollfd, message_count, sockToServer(socket), clients, procs);
-			else if (procs.contains(socket)) handleProcEvent(current, pollfd, sockToServer(socket), clients, procs);
+			} else if (clients.contains(socket))
+				handleClientEvent(current, pollfd, message_count, sockToServer(socket), clients, procs);
+			else if (procs.contains(socket))
+				handleProcEvent(current, pollfd, sockToServer(socket), clients, procs);
 			else {
 				WARN("unknown fd on the loose");
 			}
