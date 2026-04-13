@@ -111,7 +111,6 @@ static inline auto	childProcedure [[noreturn]] (const Server& self, HTTPMessage&
 	dup2(in[0], STDIN_FILENO);
 	dup2(out[1], STDOUT_FILENO);
 	execve(extensionArgs(bin, self).front().c_str(), createExecveArg(extensionArgs(bin, self)).get(), createExecveArg(buildEnviron(http, query, peer_addr, bin, self.port)).get());
-	FATAL("execve failed"); // execve should never fail here
 	exit(1);
 }
 

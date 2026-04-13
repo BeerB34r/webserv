@@ -438,11 +438,11 @@ static inline auto	handleServerEvent(struct epoll_event *current, int pollfd, st
 	}
 }
 
-static inline auto	handleClientEvent(struct epoll_event *current, int pollfd, int& message_count, Server& server, std::set<int> clients, std::set<int> procs) -> void {
+static inline auto	handleClientEvent(struct epoll_event *current, int pollfd, int& message_count, Server& server, std::set<int>& clients, std::set<int>& procs) -> void {
 	using fd = int;
 	fd	socket = current->data.fd;
 	int	events = current->events;
-	Server::Client&	client = server.clients[socket];
+	Server::Client&	client = server.clients.at(socket);
 	switch (collapseEvents(events)) {
 		case (EPOLLERR): {
 			close(socket);
@@ -492,7 +492,7 @@ static inline auto	handleClientEvent(struct epoll_event *current, int pollfd, in
 	}
 }
 
-static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Server& server, std::set<int> clients, std::set<int> procs) -> void {
+static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Server& server, std::set<int>& clients, std::set<int>& procs) -> void {
 	using fd = int;
 	[[maybe_unused]] fd	socket = current->data.fd;
 	int	events = current->events;
@@ -573,10 +573,7 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 			struct epoll_event	*current = &events[n];
 			int	socket = current->data.fd;
 			if (listeners.contains(socket)) {
-				if (handleServerEvent(current, pollfd, listeners, clients, procs)) {
-					server_rv = 1;
-					break ;
-				}
+				if ((server_rv = !!handleServerEvent(current, pollfd, listeners, clients, procs))) break ;
 			} else if (clients.contains(socket))
 				handleClientEvent(current, pollfd, message_count, sockToServer(socket), clients, procs);
 			else if (procs.contains(socket))
