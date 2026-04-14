@@ -1,2 +1,1 @@
-echo -n "\r\n"
-echo -n "Hello, Shell!\n"
+printf "\r\nHello, Shell!\n"
