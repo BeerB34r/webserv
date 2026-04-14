@@ -565,7 +565,6 @@ static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Serv
 				client.cgi->indata = "";
 				return ;
 			}
-			assert(client.cgi->out == socket);
 			[[fallthrough]];
 		}
 		case (EPOLLIN): {
