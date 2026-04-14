@@ -252,7 +252,11 @@ auto	defaultWriteEventHandler(Server& self, int pollfd, struct epoll_event* ev, 
 		client.cgi->clientReady = true;
 		return false;
 	}
-	HTTPMessage	message = client.response.value();
+	if (!client.response) {
+		ERROR("what the fuck");
+		return false;
+	}
+	HTTPMessage	message = *client.response;
 	int	status = std::get<HTTPMessage::ResponseData>(message.getData()).statusCode;
 	if (status > 399 || 200 > status) should_close = true;
 	std::stringstream	ss;
@@ -262,6 +266,7 @@ auto	defaultWriteEventHandler(Server& self, int pollfd, struct epoll_event* ev, 
 	client.data = "";
 	client.response = std::nullopt;
 	if (should_close) {
+		epoll_ctl(pollfd, EPOLL_CTL_DEL, client.sock, ev);
 		close(client.sock);
 	} else {
 		ev->events = EPOLLIN | EPOLLET;
@@ -385,6 +390,14 @@ static inline auto	getServer(std::map<int,Server>&	servers, int fd) noexcept -> 
 	for (auto& [ _, server ] : servers) for (auto& [ _, client ] : server.clients) {
 		if (!client.cgi) continue ;
 		if (client.cgi->in == fd || client.cgi->out == fd) return server;
+	}
+	std::unreachable();
+}
+
+static inline auto	getClient(Server& server, int fd) noexcept -> Server::Client& {
+	for (auto& [ _, client] : server.clients) {
+		if (!client.cgi) continue ;
+		if (client.cgi->in == fd || client.cgi->out == fd) return client;
 	}
 	std::unreachable();
 }
@@ -523,13 +536,7 @@ static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Serv
 	using fd = int;
 	fd	socket = current->data.fd;
 	int	events = current->events;
-	Server::Client& client = [&] -> Server::Client& {
-		for (auto& [_, client] : server.clients) {
-			if (!client.cgi) continue ;
-			if (client.cgi->in == socket || client.cgi->out == socket) return client;
-		}
-		std::unreachable();
-	}(); // CALLING THE LAMBDA HERE
+	Server::Client& client = getClient(server, socket);
 	struct epoll_event	ev{};
 	ev.data.fd = client.sock;
 	switch (collapseEvents(events)) {
@@ -646,10 +653,12 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 				if ((server_rv = !!handleServerEvent(current, pollfd, listeners, clients, procs))) break ;
 			} else if (clients.contains(socket))
 				handleClientEvent(current, pollfd, message_count, sockToServer(socket), clients, procs);
-			else if (procs.contains(socket))
-				handleProcEvent(current, pollfd, sockToServer(socket), clients, procs);
+			else if (procs.contains(socket)) {
+				Server&			server = sockToServer(socket);
+				handleProcEvent(current, pollfd, server, clients, procs);
+			}
 			else {
-				WARN("unknown fd on the loose");
+				epoll_ctl(pollfd, EPOLL_CTL_DEL, socket, current); // silently unfollow fds we dont know of
 			}
 		}
 	}

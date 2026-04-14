@@ -32,7 +32,7 @@
 #include <vector>
 
 #define BUFFER_SIZE 1024
-#define MAX_EVENTS 10
+#define MAX_EVENTS 100
 
 typedef std::function<HTTPMessage(Maybe<HTTPMessage>)> RequestHandler;
 
