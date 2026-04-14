@@ -574,6 +574,7 @@ static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Serv
 				close(client.cgi->in);
 			}
 			client.response = cgi::callback(client.cgi->out, server, client.cgi->pid);
+			procs.erase(client.cgi->out);
 			bool	ready = client.cgi->clientReady;
 			client.cgi = std::nullopt;
 			if (ready) if (defaultWriteEventHandler(server, pollfd, &ev, client.addr)) {
