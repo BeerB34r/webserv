@@ -532,6 +532,50 @@ static inline auto	handleClientEvent(struct epoll_event *current, int pollfd, in
 	}
 }
 
+static inline auto	sendCgiOutput(int pollfd, Server& server, Server::Client& client, std::set<int>& clients, std::set<int>& procs) -> void {
+	struct epoll_event	ev{};
+	ev.data.fd = client.sock;
+	int	socket = client.cgi->out;
+	close(client.cgi->out);
+	Maybe<Pair<std::string,std::vector<std::string>>>	parseRes = (HTTPparsing::fieldLines < HTTPparsing::crlf)(client.cgi->outdata);
+	if (!parseRes) client.response = server.statusPages.at(500);
+	else {
+		std::vector<std::string>	fieldlines = parseRes->second;
+		std::string	status{};
+		bool	found_status = false, found_length = false;
+		for (size_t i = 0; i < fieldlines.size(); ++i) {
+			if (fieldlines[i].starts_with("Status:")) {
+				status = fieldlines[i].substr(fieldlines[i].find(':') + 1);
+				fieldlines.erase(fieldlines.begin() + i--);
+				if (found_status) {
+					client.response = server.statusPages.at(500);
+					break ;
+				}
+				found_status = true;
+			} else if (fieldlines[i].starts_with("Content-Lenth:")) {
+				if (found_length) {
+					client.response = server.statusPages.at(500);
+					break ;
+				}
+				found_length = true;
+			}
+		}
+		if (!client.response) {
+			std::string	body = parseRes->first;
+			if (!found_length) fieldlines.push_back("Content-Length: " + std::to_string(body.size()));
+			if (status.empty()) client.response = HTTPMessage("HTTP/1.1 200 OK", fieldlines, body);
+			else client.response = HTTPMessage("HTTP/1.1 " + status, fieldlines, body);
+		}
+	}
+	procs.erase(client.cgi->out);
+	bool	ready = client.cgi->clientReady;
+	client.cgi = std::nullopt;
+	if (ready) if (defaultWriteEventHandler(server, pollfd, &ev, client.addr)) {
+		server.clients.erase(socket);
+		clients.erase(socket);
+	}
+}
+
 static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Server& server, std::set<int>& clients, std::set<int>& procs) -> void {
 	using fd = int;
 	fd	socket = current->data.fd;
@@ -539,6 +583,8 @@ static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Serv
 	Server::Client& client = getClient(server, socket);
 	struct epoll_event	ev{};
 	ev.data.fd = client.sock;
+	char	buf[BUFFER_SIZE]{};
+	int bytes{};
 	switch (collapseEvents(events)) {
 		case (EPOLLERR): {
 			client.response = server.statusPages.at(500);
@@ -565,21 +611,30 @@ static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Serv
 				client.cgi->indata = "";
 				return ;
 			}
-			[[fallthrough]];
+			if (client.cgi->in >= 0) {
+				procs.erase(client.cgi->in);
+				close(client.cgi->in);
+			}
+			do {
+				bytes = read(client.cgi->out, buf, BUFFER_SIZE);
+				if (bytes < 0) break ;
+				client.cgi->outdata.append(buf, bytes);
+			} while (bytes > 0);
+			sendCgiOutput(pollfd, server , client, clients, procs);
+			return ;
 		}
 		case (EPOLLIN): {
 			if (client.cgi->in >= 0) {
 				procs.erase(client.cgi->in);
 				close(client.cgi->in);
 			}
-			client.response = cgi::callback(client.cgi->out, server, client.cgi->pid);
-			procs.erase(client.cgi->out);
-			bool	ready = client.cgi->clientReady;
-			client.cgi = std::nullopt;
-			if (ready) if (defaultWriteEventHandler(server, pollfd, &ev, client.addr)) {
-				server.clients.erase(socket);
-				clients.erase(socket);
-			}
+			do {
+				bytes = read(client.cgi->out, buf, BUFFER_SIZE);
+				if (bytes < 0) break ;
+				client.cgi->outdata.append(buf, bytes);
+			} while (bytes > 0);
+			if (bytes < 0) return ; // EWOULDBLOCK/EAGAIN
+			sendCgiOutput(pollfd, server , client, clients, procs);
 			return ;
 		}
 		case (EPOLLOUT): {

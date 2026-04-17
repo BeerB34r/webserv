@@ -131,38 +131,6 @@ static inline auto	parentProcedure (HTTPMessage http, int in[2], int out[2], pid
 }
 
 namespace cgi {
-	auto	callback(int output, Server& server, pid_t proc) -> HTTPMessage {
-		if (waitpid(proc, NULL, 0) < 0) return server.statusPages.at(500);
-		std::string	rv;
-		char	buf[BUFFER_SIZE];
-		int	bytes;
-		do {
-			bytes = read(output, buf, BUFFER_SIZE);
-			if (bytes < 0) return server.statusPages.at(500);
-			rv.append(buf, bytes);
-		}	while (bytes != 0);
-		close(output);
-		Maybe<Pair<std::string,std::vector<std::string>>>	parseRes = (HTTPparsing::fieldLines < HTTPparsing::crlf)(rv); //i hate cpp
-		if (!parseRes) return server.statusPages.at(500);
-		std::vector<std::string>	fieldlines = parseRes->second;
-		std::string	status = "";
-		bool	found_status = false, found_length = false;
-		for (size_t i = 0; i < fieldlines.size(); ++i) {
-			if (fieldlines[i].starts_with("Status:")) {
-				status = fieldlines[i].substr(fieldlines[i].find(':') + 1);
-				fieldlines.erase(fieldlines.begin() + i);
-				if (found_status) return server.statusPages.at(500);
-				found_status = true;
-			} else if (fieldlines[i].starts_with("Content-Length:")) {
-				if (found_length) return server.statusPages.at(500);
-				found_length = true;
-			}
-		}
-		std::string	body = parseRes ->first;
-		if (!found_length) fieldlines.push_back("Content-Length: " + std::to_string(body.size()));
-		if (status.empty()) return HTTPMessage("HTTP/1.1 200 OK", fieldlines, body);
-		else return HTTPMessage("HTTP/1.1 " + status, fieldlines, body);
-	}
 	auto	run(const Server& self, [[maybe_unused]] HTTPMessage http, const std::filesystem::path& bin, const std::string& query, struct in_addr peer_addr) -> std::variant<Server::Cgi,HTTPMessage> {
 		using fd = int;
 
