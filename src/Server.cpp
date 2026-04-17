@@ -148,6 +148,7 @@ static auto	singleServerFromConfig(const Config& c) -> Maybe<Server> {
 			if (!key.ends_with('/')) key.push_back('/');
 			netToPath.insert(std::make_pair(key, value));
 		}
+		if (methods.empty()) methods = { HTTPMessage::GET, HTTPMessage::POST, HTTPMessage::DELETE };
 		for (auto& p : netToPath) s.routes.insert(std::make_pair(p.first, std::make_pair(p.second, methods)));
 	}
 	return s;

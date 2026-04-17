@@ -33,19 +33,26 @@ utility installed.
 Any script that is executable from the get-go should work, including:
 - script files with shebangs (`#!/path/to/interpreter`)
 - binary executables
+
 > [!NOTE]
 >The server will not be able to execute these files without execution
 >permissions!
 
 In addition to this, it supports filename extension based interpreting for the
 following extensions:
-- haskell (`.hs`)
+- haskell (`.hs`) 
 - python (`.py`)
 - bash/sh (`.sh`)
 - cgi-binaries (`.cgi`)
+
 > [!NOTE]
 >cgi-binaries are not ran using any interpreter, they are just a special file
 >extension that the server will interpret as a cgi script
+
+> [!NOTE]
+>the haskell interpreter is not gotten from any standard path, for it to work on
+>your local machine you would need to change the actual path in the code. this
+>is located in the file src/cgi.cpp:60
 
 # Resources
 
