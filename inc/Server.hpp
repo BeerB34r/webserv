@@ -76,6 +76,6 @@ struct Server : public Config {
 };
 
 auto	fromConfig(const Config&) -> std::vector<Server>;
-auto	fulfillRequestTarget(const Server&, HTTPMessage, const std::string&, const std::filesystem::path&, const std::string&, struct in_addr) -> std::variant<std::pair<int,pid_t>,HTTPMessage>;
+auto	fulfillRequestTarget(const Server&, HTTPMessage, const std::string&, const std::filesystem::path&, const std::string&, struct in_addr) -> std::variant<Server::Cgi,HTTPMessage>;
 
 #endif // SERVER_HPP

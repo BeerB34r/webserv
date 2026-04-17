@@ -25,6 +25,7 @@
 /*   ——————————————————————————————                                           */
 /* ************************************************************************** */
 
+#include <cassert>
 #include <cerrno>
 #include <cstring>
 #include <webserv.hpp>
@@ -106,7 +107,7 @@ static inline auto	checkFile(const std::filesystem::path& file, int flag) -> int
 	return 0;
 }
 
-static auto	fulfillGetRequest(const Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<int,pid_t>,HTTPMessage> {
+static auto	fulfillGetRequest(const Server& self, const HTTPMessage& http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<Server::Cgi,HTTPMessage> {
 	struct stat statbuf;
 
 	if (int status = checkFile(target, R_OK)) {
@@ -182,7 +183,7 @@ static auto	fulfillDeleteRequest(const Server& self, [[maybe_unused]] const HTTP
 	}
 }
 
-auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<int,pid_t>,HTTPMessage> {
+auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::string& request, const std::filesystem::path& target, const std::string& query, struct in_addr peer_addr) -> std::variant<Server::Cgi,HTTPMessage> {
 	// make relative to root => make the normal form => check if begins with ..
 	std::string	serverRoot = self.root;
 	for (const std::pair<const std::string, std::pair<std::string,std::set<HTTPMessage::HTTPMethod>>>& p : self.routes) {
@@ -217,7 +218,7 @@ auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::strin
 	}
 }
 
-auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_addr) noexcept -> std::variant<std::pair<int,pid_t>,HTTPMessage> {
+auto	fulfillRequest(Server& self, struct epoll_event* ev, struct in_addr peer_addr) noexcept -> std::variant<Server::Cgi,HTTPMessage> {
 	Server::Client&	client = self.clients[ev->data.fd];
 	std::optional<HTTPMessage>	http = readHTTPrequest(client.data);
 	if (http && !http->getFields().contains("Host")) return self.statusPages.at(400);
@@ -251,7 +252,11 @@ auto	defaultWriteEventHandler(Server& self, int pollfd, struct epoll_event* ev, 
 		client.cgi->clientReady = true;
 		return false;
 	}
-	HTTPMessage	message = client.response.value();
+	if (!client.response) {
+		ERROR("what the fuck");
+		return false;
+	}
+	HTTPMessage	message = *client.response;
 	int	status = std::get<HTTPMessage::ResponseData>(message.getData()).statusCode;
 	if (status > 399 || 200 > status) should_close = true;
 	std::stringstream	ss;
@@ -261,6 +266,7 @@ auto	defaultWriteEventHandler(Server& self, int pollfd, struct epoll_event* ev, 
 	client.data = "";
 	client.response = std::nullopt;
 	if (should_close) {
+		epoll_ctl(pollfd, EPOLL_CTL_DEL, client.sock, ev);
 		close(client.sock);
 	} else {
 		ev->events = EPOLLIN | EPOLLET;
@@ -291,12 +297,11 @@ auto	defaultReadEventHandler(Server& self, int pollfd, struct epoll_event* ev, s
 		// varaint containing either:
 		// A => HTTP response
 		// B => callback that returns a response, and the read-end of a pipe containing a CGI process (for epoll)
-		std::variant<std::pair<int,pid_t>,HTTPMessage>	requestResult = fulfillRequest(self, ev, peer_addr);
+		std::variant<Server::Cgi,HTTPMessage>	requestResult = fulfillRequest(self, ev, peer_addr);
 		if (std::holds_alternative<HTTPMessage>(requestResult)) client.response = std::get<HTTPMessage>(requestResult);
 		else {
-			auto [ output , proc ] = std::get<std::pair<int,pid_t>>(requestResult);
-			client.cgi = Server::Cgi({.pid = proc, .out = output, });
-			// prepare callback
+			Server::Cgi cgi = std::get<Server::Cgi>(requestResult);
+			client.cgi = cgi;
 		}
 	}
 	if (rv == 0) { // end of communication
@@ -379,14 +384,29 @@ auto	intHandler([[maybe_unused]] int signum) noexcept -> void {
 }
 
 static inline auto	getServer(std::map<int,Server>&	servers, int fd) noexcept -> Server& {
-	for (std::pair<const int, Server> &p : servers) {
-		if (p.second.clients.contains(fd)) return p.second;
+	for (auto& [ _, server ] : servers) {
+		if (server.clients.contains(fd)) return server;
+	}
+	for (auto& [ _, server ] : servers) for (auto& [ _, client ] : server.clients) {
+		if (!client.cgi) continue ;
+		if (client.cgi->in == fd || client.cgi->out == fd) return server;
+	}
+	std::unreachable();
+}
+
+static inline auto	getClient(Server& server, int fd) noexcept -> Server::Client& {
+	for (auto& [ _, client] : server.clients) {
+		if (!client.cgi) continue ;
+		if (client.cgi->in == fd || client.cgi->out == fd) return client;
 	}
 	std::unreachable();
 }
 
 static auto	closeMap(std::map<int,Server>&	fds) noexcept -> void {
 	for (auto fd : fds) close(fd.first);
+}
+static auto	closeSet(std::set<int>&	fds) noexcept -> void {
+	for (auto fd : fds) close(fd);
 }
 
 static inline auto	collapseEvents(int e) {
@@ -474,6 +494,26 @@ static inline auto	handleClientEvent(struct epoll_event *current, int pollfd, in
 			if (defaultReadEventHandler(server, pollfd, current, client.addr)) {
 				server.clients.erase(socket);
 				clients.erase(socket);
+			} else if (client.cgi) {
+				struct epoll_event	ev;
+				ev.events = EPOLLIN | EPOLLET;
+				ev.data.fd = client.cgi->in;
+				if (epoll_ctl(pollfd, EPOLL_CTL_ADD, client.cgi->in, &ev) < 0) {
+					close(client.cgi->in);
+					close(client.cgi->out);
+					client.response = server.statusPages.at(500);
+					return ;
+				}
+				ev.events = EPOLLOUT | EPOLLET;
+				ev.data.fd = client.cgi->out;
+				if (epoll_ctl(pollfd, EPOLL_CTL_ADD, client.cgi->out, &ev) < 0) {
+					close(client.cgi->in);
+					close(client.cgi->out);
+					client.response = server.statusPages.at(500);
+					return ;
+				}
+				procs.insert(client.cgi->in);
+				procs.insert(client.cgi->out);
 			}
 			message_count += !(current->events & EPOLLIN);
 			return ;
@@ -494,23 +534,60 @@ static inline auto	handleClientEvent(struct epoll_event *current, int pollfd, in
 
 static inline auto	handleProcEvent(struct epoll_event *current, int pollfd, Server& server, std::set<int>& clients, std::set<int>& procs) -> void {
 	using fd = int;
-	[[maybe_unused]] fd	socket = current->data.fd;
+	fd	socket = current->data.fd;
 	int	events = current->events;
-	(void)pollfd;
-	(void)server;
-	(void)clients;
-	(void)procs;
+	Server::Client& client = getClient(server, socket);
+	struct epoll_event	ev{};
+	ev.data.fd = client.sock;
 	switch (collapseEvents(events)) {
 		case (EPOLLERR): {
+			client.response = server.statusPages.at(500);
+			if (client.cgi->in >= 0) {
+				close(client.cgi->in);
+				procs.erase(client.cgi->in);
+			}
+			if (client.cgi->out >= 0) {
+				close(client.cgi->out);
+				procs.erase(client.cgi->out);
+			}
+			if (client.cgi->clientReady) if (defaultWriteEventHandler(server, pollfd, &ev, client.addr)) {
+				server.clients.erase(socket);
+				clients.erase(socket);
+			}
+			client.cgi = std::nullopt;
 			return ;
 		}
-		case (EPOLLHUP): {
-			return ;
+		case (EPOLLHUP): { // client closed their end of pipe
+			if (client.cgi->in == socket) {
+				close(client.cgi->in);
+				procs.erase(client.cgi->in);
+				client.cgi->in = -1;
+				client.cgi->indata = "";
+				return ;
+			}
+			[[fallthrough]];
 		}
 		case (EPOLLIN): {
+			if (client.cgi->in >= 0) {
+				procs.erase(client.cgi->in);
+				close(client.cgi->in);
+			}
+			client.response = cgi::callback(client.cgi->out, server, client.cgi->pid);
+			procs.erase(client.cgi->out);
+			bool	ready = client.cgi->clientReady;
+			client.cgi = std::nullopt;
+			if (ready) if (defaultWriteEventHandler(server, pollfd, &ev, client.addr)) {
+				server.clients.erase(socket);
+				clients.erase(socket);
+			}
 			return ;
 		}
 		case (EPOLLOUT): {
+			write(socket, client.cgi->indata.c_str(), client.cgi->indata.size());
+			close(socket);
+			procs.erase(socket);
+			client.cgi->in = -1;
+			client.cgi->indata = "";
 			return ;
 		}
 		default: {
@@ -576,47 +653,12 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 				if ((server_rv = !!handleServerEvent(current, pollfd, listeners, clients, procs))) break ;
 			} else if (clients.contains(socket))
 				handleClientEvent(current, pollfd, message_count, sockToServer(socket), clients, procs);
-			else if (procs.contains(socket))
-				handleProcEvent(current, pollfd, sockToServer(socket), clients, procs);
-			else {
-				WARN("unknown fd on the loose");
+			else if (procs.contains(socket)) {
+				Server&			server = sockToServer(socket);
+				handleProcEvent(current, pollfd, server, clients, procs);
 			}
-		}
-		// check if child is doing shit
-		for (auto& s : listeners) for (auto& c : s.second.clients) {
-			Server&			server = s.second;
-			Server::Client&	client = c.second;
-			if (!client.cgi) continue ;
-			Server::Cgi& cgi = client.cgi.value();
-			int status;
-			if (int rv = waitpid(cgi.pid, &status, WNOHANG) != cgi.pid) {
-				if (rv == 0) continue ; // WNOHANG, child is still running
-				if (rv < 0) {
-					client.response = server.statusPages.at(500);
-					close(client.cgi->in);
-					close(client.cgi->out);
-					procs.erase(client.cgi->in);
-					procs.erase(client.cgi->out);
-					client.cgi = std::nullopt;
-					continue ;
-				}
-			};
-			if (!cgi.clientReady) {
-				client.response = cgi::callback(cgi.out, server, cgi.pid);
-				procs.erase(client.cgi->in);
-				procs.erase(client.cgi->out);
-				client.cgi = std::nullopt;
-			} else {
-				HTTPMessage http = cgi::callback(cgi.out, server, cgi.pid);
-				std::stringstream ss;
-				ss << http;
-				std::string response = ss.str();
-				send(client.sock, response.c_str(), response.size(), 0);
-				close(client.sock);
-				clients.erase(client.sock);
-				procs.erase(client.cgi->in);
-				procs.erase(client.cgi->out);
-				server.clients.erase(client.sock);
+			else {
+				epoll_ctl(pollfd, EPOLL_CTL_DEL, socket, current); // silently unfollow fds we dont know of
 			}
 		}
 	}
@@ -628,10 +670,9 @@ auto	webserv(const std::vector<Server>& servers) noexcept -> int {
 		if (!client.cgi) continue ;
 		Server::Cgi&	cgi = client.cgi.value();
 		kill(cgi.pid, SIGKILL);
-		close(cgi.in);
-		close(cgi.out);
-		close(client.sock);
 	}
+	closeSet(procs);
+	closeSet(clients);
 	closeMap(listeners);
 	close(pollfd);
 	INFO(+ std::to_string(message_count) + " messages processed");

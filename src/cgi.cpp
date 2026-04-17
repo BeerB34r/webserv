@@ -105,21 +105,29 @@ static inline auto	buildEnviron(HTTPMessage& http, const std::string& query, str
 	return rv;
 }
 
-static inline auto	childProcedure [[noreturn]] (const Server& self, HTTPMessage& http, const std::filesystem::path& bin, const std::string& query, struct in_addr peer_addr, int in[2], int out[2]) -> std::pair<int,pid_t> {
+static inline auto	childProcedure [[noreturn]] (const Server& self, HTTPMessage& http, const std::filesystem::path& bin, const std::string& query, struct in_addr peer_addr, int in[2], int out[2]) -> Server::Cgi {
 	close(in[1]);
 	close(out[0]);
 	dup2(in[0], STDIN_FILENO);
 	dup2(out[1], STDOUT_FILENO);
+	close(in[0]);
+	close(out[1]);
 	execve(extensionArgs(bin, self).front().c_str(), createExecveArg(extensionArgs(bin, self)).get(), createExecveArg(buildEnviron(http, query, peer_addr, bin, self.port)).get());
 	exit(1);
 }
 
-static inline auto	parentProcedure (HTTPMessage http, int in[2], int out[2], pid_t child) -> std::pair<int,pid_t> {
+static inline auto	parentProcedure (HTTPMessage http, int in[2], int out[2], pid_t child) -> Server::Cgi {
 	close(in[0]);
 	close(out[1]);
-	if (!http.getBody().empty()) write(in[1], http.getBody().c_str(), http.getBody().size());
-	close(in[1]);
-	return std::make_pair(out[0], child);
+	fcntl(in[1], O_NONBLOCK | O_CLOEXEC);
+	fcntl(out[0], O_NONBLOCK | O_CLOEXEC);
+	return Server::Cgi({
+		.pid = child,
+		.in = in[1],
+		.out = out[0],
+		.indata = http.getBody(),
+		.outdata = ""
+	});
 }
 
 namespace cgi {
@@ -155,7 +163,7 @@ namespace cgi {
 		if (status.empty()) return HTTPMessage("HTTP/1.1 200 OK", fieldlines, body);
 		else return HTTPMessage("HTTP/1.1 " + status, fieldlines, body);
 	}
-	auto	run(const Server& self, [[maybe_unused]] HTTPMessage http, const std::filesystem::path& bin, const std::string& query, struct in_addr peer_addr) -> std::variant<std::pair<int,pid_t>,HTTPMessage> {
+	auto	run(const Server& self, [[maybe_unused]] HTTPMessage http, const std::filesystem::path& bin, const std::string& query, struct in_addr peer_addr) -> std::variant<Server::Cgi,HTTPMessage> {
 		using fd = int;
 
 		(void)query;
