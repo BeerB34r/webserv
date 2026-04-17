@@ -61,8 +61,3 @@ following extensions:
 - various manual pages
 
 AI was not used at any point during the creation of this project.
-
-# TODO
-push in/outpipes into epoll (for whatever reason) to match arbitrary subject
-requirements
-after doin this also like, kill all of the orphans before exiting
