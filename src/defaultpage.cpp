@@ -123,4 +123,14 @@ namespace defaultpage {
 				""
 				);
 	}
+	auto	create308(const std::string& redirect) -> HTTPMessage {
+		return HTTPMessage(
+				"HTTP/1.1 308 Permanent redirect",
+				{
+				"Location: " + redirect,
+				"Content-Length:0"
+				},
+				""
+				);
+	}
 }

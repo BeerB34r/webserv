@@ -144,8 +144,10 @@ static auto	singleServerFromConfig(const Config& c) -> Maybe<Server> {
 				}	while (methodcsv.size());
 				continue ;
 			}
-			if (!value.ends_with('/')) value.push_back('/');
-			if (!key.ends_with('/')) key.push_back('/');
+			if (!value.starts_with("http://") && !value.starts_with("https://")) {
+				if (!value.ends_with('/')) value.push_back('/');
+				if (!key.ends_with('/')) key.push_back('/');
+			}
 			netToPath.insert(std::make_pair(key, value));
 		}
 		if (methods.empty()) methods = { HTTPMessage::GET, HTTPMessage::POST, HTTPMessage::DELETE };

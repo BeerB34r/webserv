@@ -187,8 +187,7 @@ auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::strin
 	// make relative to root => make the normal form => check if begins with ..
 	std::string	serverRoot = self.root;
 	for (const std::pair<const std::string, std::pair<std::string,std::set<HTTPMessage::HTTPMethod>>>& p : self.routes) {
-		if (request.starts_with(p.first))
-			serverRoot = p.second.first;
+		if (request.starts_with(p.first)) serverRoot = p.second.first;
 		else continue ;
 		if (target.lexically_relative(serverRoot).lexically_normal().string().starts_with("..")) {
 			return self.statusPages.at(403); // youre not allowed to do path traversal grr
@@ -204,6 +203,9 @@ auto	fulfillRequestTarget(const Server& self, HTTPMessage http, const std::strin
 		if (!self.supportedMethods.contains(std::get<HTTPMessage::RequestData>(http.getData()).method)) {
 			return self.statusPages.at(405);
 		}
+	}
+	if (serverRoot.starts_with("http://") || serverRoot.starts_with("https://")) {
+		return defaultpage::create308(serverRoot);
 	}
 
 	if (isCGI(target, self)) {

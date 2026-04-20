@@ -38,6 +38,7 @@ namespace defaultpage {
 	extern const std::string	pageDefaultFooter;
 	auto	create200(const std::string& s) -> HTTPMessage;
 	auto	create201(const HTTPMessage& m, const std::filesystem::path& path) -> HTTPMessage;
+	auto	create308(const std::string& s) -> HTTPMessage;
 }
 
 #endif // DEFAULT_HPP
